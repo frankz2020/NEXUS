@@ -204,35 +204,38 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
         
         # Check if credential files exist
         import os
+        import sys
         from news_bot.core import config
         
-        # Debug: List what's in the app directory
+        # Debug: List what's in the app directory (use print with flush for immediate output)
         app_dir = os.path.dirname(os.path.abspath(__file__))
         cwd = os.getcwd()
-        logger.info(f"DEBUG: Current working directory: {cwd}")
-        logger.info(f"DEBUG: App file directory: {app_dir}")
-        logger.info(f"DEBUG: PROJECT_ROOT from config: {config.PROJECT_ROOT}")
-        logger.info(f"DEBUG: Looking for credentials at: {config.OAUTH_CREDENTIALS_FILE}")
-        logger.info(f"DEBUG: Looking for token at: {config.OAUTH_TOKEN_PICKLE_FILE}")
+        print(f"[CREDS DEBUG] Current working directory: {cwd}", flush=True)
+        print(f"[CREDS DEBUG] App file directory: {app_dir}", flush=True)
+        print(f"[CREDS DEBUG] PROJECT_ROOT from config: {config.PROJECT_ROOT}", flush=True)
+        print(f"[CREDS DEBUG] Looking for credentials at: {config.OAUTH_CREDENTIALS_FILE}", flush=True)
+        print(f"[CREDS DEBUG] Looking for token at: {config.OAUTH_TOKEN_PICKLE_FILE}", flush=True)
         
         # List files in cwd
         try:
             files_in_cwd = os.listdir(cwd)
-            logger.info(f"DEBUG: Files in cwd ({cwd}): {[f for f in files_in_cwd if 'credential' in f.lower() or 'token' in f.lower() or 'pickle' in f.lower()]}")
+            cred_files = [f for f in files_in_cwd if 'credential' in f.lower() or 'token' in f.lower() or 'pickle' in f.lower()]
+            print(f"[CREDS DEBUG] Credential-related files in cwd: {cred_files}", flush=True)
         except Exception as e:
-            logger.info(f"DEBUG: Could not list cwd: {e}")
+            print(f"[CREDS DEBUG] Could not list cwd: {e}", flush=True)
         
         # List files in PROJECT_ROOT
         try:
             files_in_root = os.listdir(config.PROJECT_ROOT)
-            logger.info(f"DEBUG: Files in PROJECT_ROOT: {[f for f in files_in_root if 'credential' in f.lower() or 'token' in f.lower() or 'pickle' in f.lower()]}")
+            cred_files_root = [f for f in files_in_root if 'credential' in f.lower() or 'token' in f.lower() or 'pickle' in f.lower()]
+            print(f"[CREDS DEBUG] Credential-related files in PROJECT_ROOT: {cred_files_root}", flush=True)
         except Exception as e:
-            logger.info(f"DEBUG: Could not list PROJECT_ROOT: {e}")
+            print(f"[CREDS DEBUG] Could not list PROJECT_ROOT: {e}", flush=True)
         
         creds_exists = os.path.exists(config.OAUTH_CREDENTIALS_FILE)
         token_exists = os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE)
-        logger.info(f"Credentials file exists: {creds_exists}")
-        logger.info(f"Token pickle exists: {token_exists}")
+        print(f"[CREDS DEBUG] Credentials file exists: {creds_exists}", flush=True)
+        print(f"[CREDS DEBUG] Token pickle exists: {token_exists}", flush=True)
         
         if not creds_exists:
             doc_error = f"credentials.json not found at {config.OAUTH_CREDENTIALS_FILE}"
