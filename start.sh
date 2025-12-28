@@ -16,6 +16,24 @@ echo "  PYTHONPATH: ${PYTHONPATH:-NOT SET}"
 echo "  PLAYWRIGHT_BROWSERS_PATH: ${PLAYWRIGHT_BROWSERS_PATH:-NOT SET}"
 echo ""
 
+# Create credentials.json from environment variable if set
+if [ -n "$GOOGLE_OAUTH_CREDENTIALS_JSON" ]; then
+    echo "✅ Creating credentials.json from GOOGLE_OAUTH_CREDENTIALS_JSON env var..."
+    echo "$GOOGLE_OAUTH_CREDENTIALS_JSON" > credentials.json
+    echo "✅ credentials.json created successfully"
+else
+    echo "ℹ️  GOOGLE_OAUTH_CREDENTIALS_JSON not set (Google Docs export will be disabled)"
+fi
+
+# Create token.pickle from environment variable if set (for pre-authenticated tokens)
+if [ -n "$GOOGLE_OAUTH_TOKEN_PICKLE_BASE64" ]; then
+    echo "✅ Creating token.pickle from GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 env var..."
+    echo "$GOOGLE_OAUTH_TOKEN_PICKLE_BASE64" | base64 -d > token.pickle
+    echo "✅ token.pickle created successfully"
+else
+    echo "ℹ️  GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 not set (will need OAuth flow if credentials.json is provided)"
+fi
+
 # Check if app.py exists
 if [ -f "app.py" ]; then
     echo "✅ app.py found"
