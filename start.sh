@@ -17,26 +17,38 @@ echo "  PLAYWRIGHT_BROWSERS_PATH: ${PLAYWRIGHT_BROWSERS_PATH:-NOT SET}"
 echo ""
 
 # Create credentials.json from environment variable if set
+echo "DEBUG: Current working directory is: $(pwd)"
+echo "DEBUG: GOOGLE_OAUTH_CREDENTIALS_JSON length: ${#GOOGLE_OAUTH_CREDENTIALS_JSON}"
+
 if [ -n "$GOOGLE_OAUTH_CREDENTIALS_JSON" ]; then
     echo "✅ Creating credentials.json from GOOGLE_OAUTH_CREDENTIALS_JSON env var..."
-    echo "$GOOGLE_OAUTH_CREDENTIALS_JSON" > credentials.json
-    echo "✅ credentials.json created successfully"
+    echo "$GOOGLE_OAUTH_CREDENTIALS_JSON" > "$(pwd)/credentials.json"
+    if [ -f "$(pwd)/credentials.json" ]; then
+        echo "✅ credentials.json created at $(pwd)/credentials.json"
+        echo "DEBUG: File size: $(wc -c < credentials.json) bytes"
+    else
+        echo "❌ Failed to create credentials.json"
+    fi
 else
-    echo "ℹ️  GOOGLE_OAUTH_CREDENTIALS_JSON not set (Google Docs export will be disabled)"
+    echo "⚠️  GOOGLE_OAUTH_CREDENTIALS_JSON is NOT SET or EMPTY!"
+    echo "DEBUG: Check Railway environment variables"
 fi
 
 # Create token.pickle from environment variable if set (for pre-authenticated tokens)
+echo "DEBUG: GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 length: ${#GOOGLE_OAUTH_TOKEN_PICKLE_BASE64}"
+
 if [ -n "$GOOGLE_OAUTH_TOKEN_PICKLE_BASE64" ]; then
     echo "✅ Creating token.pickle from GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 env var..."
     # Use Python for cross-platform base64 decoding (more reliable than shell base64)
     python3 -c "import base64,os; open('token.pickle','wb').write(base64.b64decode(os.environ['GOOGLE_OAUTH_TOKEN_PICKLE_BASE64']))"
     if [ -f "token.pickle" ]; then
-        echo "✅ token.pickle created successfully"
+        echo "✅ token.pickle created at $(pwd)/token.pickle"
+        echo "DEBUG: File size: $(wc -c < token.pickle) bytes"
     else
         echo "❌ Failed to create token.pickle"
     fi
 else
-    echo "ℹ️  GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 not set (will need OAuth flow if credentials.json is provided)"
+    echo "⚠️  GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 is NOT SET or EMPTY!"
 fi
 
 # Check if app.py exists
