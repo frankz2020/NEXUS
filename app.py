@@ -49,6 +49,40 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# Ensure Google credentials exist from environment variables
+def restore_credentials_from_env():
+    """Restore Google OAuth credentials from environment variables if files are missing."""
+    try:
+        # Import config to get paths
+        from news_bot.core import config
+        
+        # 1. Restore credentials.json
+        if not os.path.exists(config.OAUTH_CREDENTIALS_FILE):
+            creds_json = os.environ.get('GOOGLE_OAUTH_CREDENTIALS_JSON')
+            if creds_json:
+                logger.info(f"Restoring credentials.json from env var to {config.OAUTH_CREDENTIALS_FILE}")
+                with open(config.OAUTH_CREDENTIALS_FILE, 'w') as f:
+                    f.write(creds_json)
+            else:
+                logger.warning("GOOGLE_OAUTH_CREDENTIALS_JSON env var not set (credentials.json missing)")
+        
+        # 2. Restore token.pickle
+        if not os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE):
+            token_base64 = os.environ.get('GOOGLE_OAUTH_TOKEN_PICKLE_BASE64')
+            if token_base64:
+                import base64
+                logger.info(f"Restoring token.pickle from env var to {config.OAUTH_TOKEN_PICKLE_FILE}")
+                with open(config.OAUTH_TOKEN_PICKLE_FILE, 'wb') as f:
+                    f.write(base64.b64decode(token_base64))
+            else:
+                logger.warning("GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 env var not set (token.pickle missing)")
+                
+    except Exception as e:
+        logger.error(f"Error restoring credentials: {e}")
+
+# Try to restore credentials on startup
+restore_credentials_from_env()
+
 # Pre-import modules (optional, will be imported in workers if this fails)
 try:
     import requests
@@ -203,9 +237,15 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
         doc_error = None
         
         # Check if credential files exist
-        import os
-        import sys
         from news_bot.core import config
+        
+        # Try to restore credentials if missing (last resort)
+        if not os.path.exists(config.OAUTH_CREDENTIALS_FILE) or not os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE):
+             print("[CREDS DEBUG] Credentials missing in worker, attempting restore...", flush=True)
+             try:
+                 restore_credentials_from_env()
+             except Exception as e:
+                 print(f"[CREDS DEBUG] Restore failed: {e}", flush=True)
         
         # Debug: List what's in the app directory (use print with flush for immediate output)
         app_dir = os.path.dirname(os.path.abspath(__file__))
