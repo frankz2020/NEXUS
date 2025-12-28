@@ -28,8 +28,13 @@ fi
 # Create token.pickle from environment variable if set (for pre-authenticated tokens)
 if [ -n "$GOOGLE_OAUTH_TOKEN_PICKLE_BASE64" ]; then
     echo "✅ Creating token.pickle from GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 env var..."
-    echo "$GOOGLE_OAUTH_TOKEN_PICKLE_BASE64" | base64 -d > token.pickle
-    echo "✅ token.pickle created successfully"
+    # Use Python for cross-platform base64 decoding (more reliable than shell base64)
+    python3 -c "import base64,os; open('token.pickle','wb').write(base64.b64decode(os.environ['GOOGLE_OAUTH_TOKEN_PICKLE_BASE64']))"
+    if [ -f "token.pickle" ]; then
+        echo "✅ token.pickle created successfully"
+    else
+        echo "❌ Failed to create token.pickle"
+    fi
 else
     echo "ℹ️  GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 not set (will need OAuth flow if credentials.json is provided)"
 fi
