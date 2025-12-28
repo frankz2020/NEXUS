@@ -199,6 +199,8 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
         
         # Step 4: Export to Google Doc
         update_task(task_id, progress=85, message="Exporting to Google Doc...")
+        doc_link = None
+        doc_error = None
         try:
             doc_link = google_docs_exporter.update_or_create_news_document(
                 school=school_profile,
@@ -211,9 +213,15 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
                 week_end_date=datetime.now().date(),
                 is_email=False
             )
+            if doc_link:
+                logger.info(f"Google Doc created successfully: {doc_link}")
+            else:
+                doc_error = "Google Docs exporter returned None (check credentials)"
+                logger.warning(doc_error)
         except Exception as e:
-            logger.warning(f"Google Docs export failed: {e}")
-            doc_link = None
+            doc_error = f"Google Docs export failed: {e}"
+            logger.warning(doc_error)
+            logger.warning(traceback.format_exc())
         
         result = {
             "title": chinese_title,  # For sidebar display
@@ -221,7 +229,8 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
             "chinese_report": chinese_report,
             "english_summary": english_summary,
             "source_url": url,
-            "doc_link": doc_link
+            "doc_link": doc_link,
+            "doc_error": doc_error  # Include error for debugging
         }
         
         update_task(task_id, status="completed", progress=100, 
