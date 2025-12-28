@@ -52,10 +52,11 @@ def log_prompt(function_name: str, prompt: str, context: dict = None):
     """
     global _prompt_log_file, _prompt_counter
     
+    # Initialize log file if not already done (outside lock to avoid deadlock)
+    if _prompt_log_file is None:
+        initialize_prompt_log()
+    
     with _prompt_log_lock:
-        # Initialize log file if not already done
-        if _prompt_log_file is None:
-            initialize_prompt_log()
         
         _prompt_counter += 1
         

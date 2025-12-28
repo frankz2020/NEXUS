@@ -53,3 +53,7 @@ Thumbs.db
 
 git diff --cached --name-only  
 git status   
+
+prompt_logs/
+
+*.png

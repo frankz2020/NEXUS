@@ -3,9 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project NEXUS - News Bot Dashboard</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+    <title>LIVE Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-secondary: #131315;
+            --bg-tertiary: #1a1a1d;
+            --bg-elevated: #222226;
+            --border: #2a2a2e;
+            --border-hover: #3a3a3e;
+            --text-primary: #f0f0f2;
+            --text-secondary: #a0a0a8;
+            --text-muted: #606068;
+            --accent: #3d7fff;
+            --accent-hover: #5a93ff;
+            --success: #22c55e;
+            --warning: #eab308;
+            --error: #ef4444;
+            --radius: 6px;
+            --radius-lg: 10px;
+            /* Task type colors */
+            --type-url-doc: #4a90d9;
+            --type-doc-img: #8b5cf6;
+            --type-text-img: #f59e0b;
+            --type-sources: #10b981;
+            /* School colors - muted but visible */
+            --school-nyu: #57068c;
+            --school-usc: #990000;
+            --school-edin: #b3b3b3;
+            --school-ucd: #002855;
+            --school-default: #4a4a4a;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,1161 +45,2387 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'DM Sans', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
             min-height: 100vh;
-            padding: 20px;
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
+        /* Layout */
+        .app {
+            display: flex;
+            min-height: 100vh;
         }
 
-        .header {
-            text-align: center;
+        .sidebar {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px 40px;
+        }
+
+        /* Sidebar */
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+        }
+
+        .logo span {
+            color: var(--text-muted);
+            font-weight: 400;
+            margin-left: 8px;
+            font-size: 13px;
+        }
+
+        .task-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .task-list-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding: 0 4px;
+        }
+
+        .task-list-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .task-filters {
+            display: flex;
+            gap: 4px;
+        }
+
+        .filter-btn {
+            padding: 3px 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            font-weight: 500;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .filter-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text-secondary);
+        }
+
+        .filter-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
             color: white;
-            margin-bottom: 30px;
         }
 
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        .filter-btn.school-filter {
+            text-transform: uppercase;
         }
 
-        .header p {
-            font-size: 1.1rem;
+        .filter-btn.school-filter.nyu { background: var(--school-nyu); border-color: var(--school-nyu); color: white; }
+        .filter-btn.school-filter.usc { background: var(--school-usc); border-color: var(--school-usc); color: white; }
+        .filter-btn.school-filter.edin { background: var(--school-edin); border-color: var(--school-edin); color: #333; }
+        .filter-btn.school-filter.ucd { background: var(--school-ucd); border-color: var(--school-ucd); color: white; }
+        .filter-btn.school-filter.emory { background: #222c66; border-color: #222c66; color: white; }
+        .filter-btn.school-filter.ubc { background: #002145; border-color: #002145; color: white; }
+
+        /* School download button */
+        .school-download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--success) 0%, #16a34a 100%);
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            box-shadow: 0 2px 4px rgba(34, 197, 94, 0.3);
+        }
+
+        .school-download-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(34, 197, 94, 0.4);
+        }
+
+        .school-download-btn:active {
+            transform: translateY(0);
+        }
+
+        .school-download-btn svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        .task-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+            position: relative;
+        }
+
+        .task-item:hover {
+            border-color: var(--border-hover);
+        }
+
+        .task-item.running {
+            border-color: var(--accent);
+        }
+
+        .task-item.completed {
+            border-color: var(--success);
+        }
+
+        .task-item.error {
+            border-color: var(--error);
+        }
+
+        /* Task badges */
+        .task-badge {
+            position: absolute;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 8px;
+            font-weight: 600;
+            padding: 2px 5px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .task-badge-type {
+            top: 6px;
+            left: 6px;
+            color: white;
+        }
+
+        .task-badge-type.url-doc { background: var(--type-url-doc); }
+        .task-badge-type.doc-img { background: var(--type-doc-img); }
+        .task-badge-type.text-img { background: var(--type-text-img); }
+        .task-badge-type.sources { background: var(--type-sources); }
+
+        .task-badge-school {
+            top: 6px;
+            right: 28px;
+            color: white;
             opacity: 0.9;
         }
 
-        .card {
-            background: white;
-            border-radius: 16px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
+        .task-badge-school.nyu { background: var(--school-nyu); }
+        .task-badge-school.usc { background: var(--school-usc); }
+        .task-badge-school.edin { background: var(--school-edin); color: #333; }
+        .task-badge-school.ucd { background: var(--school-ucd); }
+        .task-badge-school.default { background: var(--school-default); }
 
-        .card h2 {
-            color: #667eea;
-            margin-bottom: 20px;
-            font-size: 1.5rem;
-            border-bottom: 2px solid #f0f0f0;
-            padding-bottom: 10px;
-        }
-
-        .form-group {
+        .task-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-end;
+            gap: 8px;
             margin-bottom: 20px;
         }
 
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .form-group select,
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
-        }
-
-        .form-group select:focus,
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .task-close {
+            padding: 2px;
+            background: none;
             border: none;
-            padding: 15px 40px;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: 600;
+            color: var(--text-muted);
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            width: 100%;
+            opacity: 0.5;
+            transition: opacity 0.15s, color 0.15s;
+            flex-shrink: 0;
         }
 
-        .btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        .task-close:hover {
+            opacity: 1;
+            color: var(--error);
         }
 
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .progress-container {
-            display: none;
-        }
-
-        .progress-container.active {
+        .task-close svg {
+            width: 14px;
+            height: 14px;
             display: block;
         }
 
-        .progress-bar-wrapper {
-            background: #f0f0f0;
-            border-radius: 10px;
-            height: 30px;
-            overflow: hidden;
-            margin-bottom: 15px;
+        .task-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .task-btn {
+            padding: 4px 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .task-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+
+        .task-btn.gdoc {
+            background: rgba(34, 197, 94, 0.1);
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .task-btn.gdoc:hover {
+            background: rgba(34, 197, 94, 0.2);
+        }
+
+        .task-title-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .task-icon {
+            flex-shrink: 0;
+            width: 16px;
+            height: 16px;
+            margin-top: 2px;
+            opacity: 0.7;
+        }
+
+        .task-icon.doc { color: var(--type-url-doc); }
+        .task-icon.img { color: var(--type-doc-img); }
+
+        .task-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            line-height: 1.4;
+            /* Allow wrapping instead of truncating */
+            word-break: break-word;
+        }
+
+        .task-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .progress-bar {
+            flex: 1;
+            height: 4px;
+            background: var(--bg-primary);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            transition: width 0.5s ease;
+            background: var(--accent);
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.complete {
+            background: var(--success);
+        }
+
+        .progress-fill.error {
+            background: var(--error);
+        }
+
+        .progress-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            min-width: 36px;
+            text-align: right;
+        }
+
+        .task-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Main Content */
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .section-desc {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .panels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
-            justify-content: center;
-            color: white;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 15px;
             font-weight: 600;
         }
 
-        .progress-status {
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            border-left: 4px solid #667eea;
+        .panel-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 500;
+            padding: 4px 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            color: var(--text-muted);
         }
 
-        .progress-status p {
-            margin: 5px 0;
-            color: #555;
-        }
-
-        .progress-status .emoji {
-            margin-right: 8px;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }
-
-        .stat-box {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .stat-box .number {
-            font-size: 2rem;
-            font-weight: 700;
-            display: block;
-        }
-
-        .stat-box .label {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
-
-        .log-container {
-            max-height: 300px;
-            overflow-y: auto;
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-        }
-
-        .log-entry {
-            padding: 5px 0;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-
-        .error {
-            background: #fee;
-            border-left: 4px solid #f44336;
-            padding: 15px;
-            border-radius: 8px;
-            color: #c62828;
-            margin-top: 15px;
-        }
-
-        .success {
-            background: #e8f5e9;
-            border-left: 4px solid #4caf50;
-            padding: 15px;
-            border-radius: 8px;
-            color: #2e7d32;
-            margin-top: 15px;
-        }
-
-        .school-option {
-            padding: 10px;
-            font-size: 1rem;
-        }
-
-        @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            .stats {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        .info-box {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .info-box p {
-            margin: 5px 0;
-            color: #1565c0;
-        }
-
-        .report-details {
-            background: #f8f9fa;
+        .panel-body {
             padding: 20px;
-            border-radius: 8px;
-            margin-top: 15px;
-            max-height: 400px;
-            overflow-y: auto;
         }
 
-        .report-item {
-            background: white;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 16px;
         }
 
-        .report-item h4 {
-            color: #667eea;
-            margin-bottom: 10px;
+        .form-group:last-child {
+            margin-bottom: 0;
         }
 
-        .report-item p {
-            margin: 5px 0;
-            color: #555;
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(61, 127, 255, 0.15);
+        }
+
+        .form-input::placeholder, .form-textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-textarea {
+            min-height: 120px;
+            resize: vertical;
             line-height: 1.6;
         }
 
-        .report-item .chinese {
-            color: #333;
-            font-weight: 500;
+        .form-select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23606068' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
         }
 
-        .report-item .url {
-            font-size: 0.85rem;
-            color: #999;
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row > * {
+            flex: 1;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-full {
+            width: 100%;
+            margin-top: 16px;
+        }
+
+        .btn-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* URL List */
+        .url-list {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-tertiary);
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        .url-list-empty {
+            padding: 24px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Sources Queue by School */
+        .sources-queue-section {
+            margin-bottom: 16px;
+        }
+
+        .sources-queue-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+
+        .sources-queue-header.nyu { border-left: 3px solid var(--school-nyu); }
+        .sources-queue-header.usc { border-left: 3px solid var(--school-usc); }
+        .sources-queue-header.edin { border-left: 3px solid var(--school-edin); }
+        .sources-queue-header.ucd { border-left: 3px solid var(--school-ucd); }
+        .sources-queue-header.emory { border-left: 3px solid #222c66; }
+        .sources-queue-header.ubc { border-left: 3px solid #002145; }
+
+        .sources-queue-school {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .sources-queue-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .sources-queue-urls {
+            border: 1px solid var(--border);
+            border-top: none;
+            border-radius: 0 0 var(--radius) var(--radius);
+            background: var(--bg-tertiary);
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .sources-queue-url {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sources-queue-url:last-child {
+            border-bottom: none;
+        }
+
+        .sources-queue-url-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .sources-queue-url .url-remove {
+            opacity: 0;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+
+        .sources-queue-url:hover .url-remove {
+            opacity: 1;
+        }
+
+        .sources-queue-generate {
+            margin-top: 8px;
+        }
+
+        .url-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .url-item:last-child {
+            border-bottom: none;
+        }
+
+        .url-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .url-remove {
+            padding: 4px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s, color 0.15s;
+        }
+
+        .url-item:hover .url-remove {
+            opacity: 1;
+        }
+
+        .url-remove:hover {
+            color: var(--error);
+        }
+
+        .url-add-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .url-add-row .form-input {
+            flex: 1;
+        }
+
+        .btn-add {
+            padding: 10px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .btn-add:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+
+        /* Result Display */
+        .result-box {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .result-box.visible {
+            display: block;
+        }
+
+        .result-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .result-link {
+            display: block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--accent);
+            text-decoration: none;
             word-break: break-all;
         }
 
-        .report-item textarea {
+        .result-link:hover {
+            text-decoration: underline;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* Image Preview Grid */
+        .image-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .image-preview-item {
+            position: relative;
+            aspect-ratio: 9/16;
+            border-radius: var(--radius);
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            transition: transform 0.15s, border-color 0.15s;
+        }
+
+        .image-preview-item:hover {
+            transform: scale(1.02);
+            border-color: var(--accent);
+        }
+
+        .image-preview-item img {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-preview-item .download-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .image-preview-item:hover .download-overlay {
+            opacity: 1;
+        }
+
+        .download-overlay svg {
+            width: 24px;
+            height: 24px;
+            color: white;
+        }
+
+        /* Doc Queue Selector */
+        .doc-queue {
+            margin-bottom: 16px;
+        }
+
+        .doc-queue-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .doc-queue-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-tertiary);
+        }
+
+        .doc-queue-empty {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .doc-queue-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .doc-queue-item:last-child {
+            border-bottom: none;
+        }
+
+        .doc-queue-item:hover {
+            background: var(--bg-elevated);
+        }
+
+        .doc-queue-item.selected {
+            background: rgba(61, 127, 255, 0.1);
+        }
+
+        .doc-queue-checkbox {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.15s;
+        }
+
+        .doc-queue-item.selected .doc-queue-checkbox {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .doc-queue-checkbox svg {
+            width: 10px;
+            height: 10px;
+            color: white;
+            opacity: 0;
+        }
+
+        .doc-queue-item.selected .doc-queue-checkbox svg {
+            opacity: 1;
+        }
+
+        .doc-queue-text {
+            flex: 1;
+            font-size: 13px;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        /* Status Indicators */
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-dot.pending { background: var(--text-muted); }
+        .status-dot.running { background: var(--accent); animation: pulse 1.5s infinite; }
+        .status-dot.completed { background: var(--success); }
+        .status-dot.error { background: var(--error); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.2s ease;
+        }
+
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error { border-left: 3px solid var(--error); }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            padding: 4px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .modal-body pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text-secondary);
+        }
+
+        /* Image Preview Modal */
+        .image-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+            padding: 40px;
+        }
+
+        .image-modal-overlay.visible {
+            display: flex;
+        }
+
+        .image-modal {
+            position: relative;
+            max-width: 100%;
+            max-height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .image-modal-close {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            transition: all 0.15s;
+            z-index: 10;
+        }
+
+        .image-modal-close:hover {
+            background: var(--error);
+            border-color: var(--error);
+            color: white;
+        }
+
+        .image-modal-img {
+            max-width: 100%;
+            max-height: calc(100vh - 160px);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        .image-modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .image-modal-btn {
+            padding: 12px 24px;
             font-family: inherit;
-            font-size: 1rem;
-            resize: vertical;
-            min-height: 100px;
+            font-size: 14px;
+            font-weight: 500;
+            background: var(--accent);
+            border: none;
+            border-radius: var(--radius);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.15s;
+            text-decoration: none;
         }
 
-        .report-item textarea:focus {
-            outline: none;
-            border-color: #667eea;
+        .image-modal-btn:hover {
+            background: var(--accent-hover);
         }
 
-        .report-item input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 1rem;
+        .image-modal-btn.secondary {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
         }
 
-        .report-item input[type="text"]:focus {
-            outline: none;
-            border-color: #667eea;
+        .image-modal-btn.secondary:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
         }
 
-        .edit-mode-btn.active {
-            background: #667eea !important;
-            color: white !important;
+        .image-modal-btn svg {
+            width: 18px;
+            height: 18px;
         }
 
-        #generate-images-btn {
-            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        .image-modal-title {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 16px;
+            text-align: center;
+            max-width: 400px;
+            word-break: break-word;
         }
 
-        #generate-images-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(67, 233, 123, 0.4);
-        }
-
-        #ai-edit-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        #save-report-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(67, 233, 123, 0.4);
-        }
-
-        #download-zip-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(250, 112, 154, 0.4);
+        /* Responsive */
+        @media (max-width: 900px) {
+            .app {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                max-height: 300px;
+            }
+            .main {
+                padding: 24px 16px;
+            }
+            .panels {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 Project NEXUS</h1>
-            <p>Automated University News Collection & Translation System</p>
-        </div>
-
-        <div class="card">
-            <h2>📋 Configuration</h2>
-            
-            <div class="info-box">
-                <p><strong>How it works:</strong></p>
-                <p>1. Select a university to collect news from</p>
-                <p>2. Choose your date range (default: last 7 days)</p>
-                <p>3. Click "Start News Collection" and monitor progress</p>
-                <p>4. Reports will be saved as JSON files</p>
-                <p>5. Optionally generate WeChat-style images from the JSON</p>
+    <div class="app">
+        <!-- Sidebar: Task Queue -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">LIVE Weekly <span>Studio</span></div>
             </div>
-
-            <form id="config-form">
-                <div class="form-group">
-                    <label for="school">🎓 Select University:</label>
-                    <select id="school" name="school" required>
-                        {% for key, info in schools.items() %}
-                        <option value="{{ info.id }}" class="school-option">
-                            {{ info.school_name }} ({{ info.school_location }})
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="start-date">📅 Start Date:</label>
-                        <input type="date" id="start-date" name="start-date" value="{{ default_start_date }}" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="end-date">📅 End Date:</label>
-                        <input type="date" id="end-date" name="end-date" value="{{ default_end_date }}" required>
+            <div class="task-list">
+                <div class="task-list-header">
+                    <div class="task-list-title">Active Tasks</div>
+                    <div class="task-filters">
+                        <button class="filter-btn active" data-filter="all" onclick="setTaskFilter('all')">All</button>
+                        <button class="filter-btn" data-filter="url_to_doc" onclick="setTaskFilter('url_to_doc')">Doc</button>
+                        <button class="filter-btn" data-filter="image" onclick="setTaskFilter('image')">Img</button>
                     </div>
                 </div>
-
-                <div class="form-group">
-                    <label for="max-reports">📊 Maximum Reports:</label>
-                    <input type="number" id="max-reports" name="max-reports" value="{{ max_reports }}" min="1" max="50" required>
+                <div id="schoolFilterContainer" style="display: none; margin-bottom: 12px; padding: 0 4px;">
+                    <!-- School filter buttons will be populated dynamically -->
                 </div>
-
-                <button type="submit" class="btn" id="start-btn">
-                    🚀 Start News Collection
-                </button>
-            </form>
-        </div>
-
-        <div class="card progress-container" id="progress-container">
-            <h2>⚙️ Progress</h2>
-            
-            <div class="progress-bar-wrapper">
-                <div class="progress-bar" id="progress-bar" style="width: 0%">0%</div>
-            </div>
-
-            <div class="progress-status" id="progress-status">
-                <p><span class="emoji">⏳</span><span id="current-step">Initializing...</span></p>
-            </div>
-
-            <div class="stats">
-                <div class="stat-box">
-                    <span class="number" id="articles-found">0</span>
-                    <span class="label">Articles Found</span>
-                </div>
-                <div class="stat-box">
-                    <span class="number" id="articles-processed">0</span>
-                    <span class="label">Articles Processed</span>
-                </div>
-                <div class="stat-box">
-                    <span class="number" id="reports-generated">0</span>
-                    <span class="label">Reports Generated</span>
+                <div id="taskContainer">
+                    <div class="task-empty">No tasks yet. Start by adding a URL or content.</div>
                 </div>
             </div>
+        </aside>
 
-            <div id="result-message"></div>
-        </div>
+        <!-- Main Content -->
+        <main class="main">
+            <h1 class="section-title">News Production</h1>
+            <p class="section-desc">Generate Chinese news content and WeChat-ready images.</p>
 
-        <div class="card">
-            <h2>📄 Activity Log</h2>
-            <div class="log-container" id="log-container">
-                <div class="log-entry">Ready to start news collection...</div>
-            </div>
-            <div style="margin-top: 10px; text-align: right;">
-                <a href="/api/debug" target="_blank" style="font-size: 0.8rem; color: #999;">🔧 Debug Info</a>
-                <span style="margin: 0 5px; color: #ddd;">|</span>
-                <a href="/health" target="_blank" style="font-size: 0.8rem; color: #999;">❤️ Health Check</a>
-            </div>
-        </div>
+            <div class="panels">
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="panel-title">URL to Chinese News</span>
+                        <span class="panel-badge">AI Process</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label class="form-label">News Article URL</label>
+                            <input type="url" class="form-input" id="urlInput" 
+                                   placeholder="https://example.com/news-article">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Custom Title (Optional)</label>
+                            <input type="text" class="form-input" id="urlTitle" 
+                                   placeholder="Leave empty to auto-generate">
+                        </div>
+                        <button class="btn btn-primary btn-full" onclick="submitUrlToDoc()">
+                            Process URL
+                        </button>
+                    </div>
+                </div>
 
-        <div class="card" id="report-review-container" style="display: none;">
-            <h2>📋 Review Generated Report</h2>
-            
-            <div class="info-box">
-                <p><strong>✅ Report Generated Successfully!</strong></p>
-                <p id="report-summary"></p>
-            </div>
-
-            <div class="report-details" id="report-details"></div>
-
-            <!-- AI Chat Interface -->
-            <div style="margin-top: 30px; border-top: 2px solid #e0e0e0; padding-top: 20px;">
-                <h3 style="color: #667eea; margin-bottom: 15px;">🤖 AI Text Editor</h3>
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Select article to edit:</label>
-                    <select id="article-selector" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; margin-bottom: 15px;">
-                        <option value="">Select an article...</option>
-                    </select>
-                    
-                    <div id="edit-mode-selector" style="display: none;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Edit mode:</label>
-                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <button type="button" class="edit-mode-btn active" data-mode="title" style="flex: 1; padding: 10px; border: 2px solid #667eea; background: #667eea; color: white; border-radius: 6px; cursor: pointer;">Edit Title</button>
-                            <button type="button" class="edit-mode-btn" data-mode="content" style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; background: white; color: #667eea; border-radius: 6px; cursor: pointer;">Edit Content</button>
+                <!-- Panel 2: Google Doc to Images -->
+                <div class="panel" id="gdocPanel">
+                    <div class="panel-header">
+                        <span class="panel-title">Google Doc to Images</span>
+                        <span class="panel-badge">Image Gen</span>
+                    </div>
+                    <div class="panel-body">
+                        <!-- Doc Queue from completed URL->Doc tasks -->
+                        <div class="doc-queue" id="docQueueSection">
+                            <div class="doc-queue-title">Select from Generated Docs</div>
+                            <div class="doc-queue-list" id="docQueueList">
+                                <div class="doc-queue-empty">No documents ready. Generate from URLs first.</div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label class="form-label">Or paste Google Doc URL directly</label>
+                            <input type="text" class="form-input" id="gdocInput" 
+                                   placeholder="https://docs.google.com/document/d/...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">School</label>
+                            <select class="form-select" id="gdocSchool">
+                                {% for key, school in schools.items() %}
+                                <option value="{{ key }}">{{ school.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button class="btn btn-primary btn-full" onclick="submitGdocToImages()">
+                            Generate Images
+                        </button>
+                        
+                        <!-- Image Preview Grid -->
+                        <div id="imagePreviewSection" style="display: none; margin-top: 20px;">
+                            <div class="result-title">Generated Images (click to download)</div>
+                            <div class="image-preview-grid" id="imagePreviewGrid"></div>
                         </div>
                     </div>
-                    
-                    <div id="chat-interface" style="display: none;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Enter your editing prompt:</label>
-                        <textarea id="ai-prompt-input" placeholder="e.g., 'Make the title more engaging', 'Simplify the language', 'Add more details about...'" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 6px; min-height: 80px; font-family: inherit; resize: vertical;"></textarea>
-                        <button type="button" id="ai-edit-btn" style="margin-top: 10px; padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
-                            ✨ Apply AI Edit
+                </div>
+
+                <!-- Panel 3: Text to Image -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="panel-title">Text to Image</span>
+                        <span class="panel-badge">Direct</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">School</label>
+                                <select class="form-select" id="textSchool">
+                                    {% for key, school in schools.items() %}
+                                    <option value="{{ key }}">{{ school.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Title</label>
+                            <input type="text" class="form-input" id="textTitle" 
+                                   placeholder="Chinese news title">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Content</label>
+                            <textarea class="form-textarea" id="textContent" 
+                                      placeholder="Paste or type Chinese news content..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Source URL (Optional - for cover image)</label>
+                            <input type="url" class="form-input" id="textSourceUrl" 
+                                   placeholder="https://example.com/original-article">
+                        </div>
+                        <button class="btn btn-primary btn-full" onclick="submitTextToImage()">
+                            Generate Image
                         </button>
-                        <div id="ai-edit-status" style="display: none; margin-top: 10px;"></div>
+                        <div class="result-box" id="textResult">
+                            <div class="result-title">Generated Image</div>
+                            <div id="textResultContent"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 4: Sources Image -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="panel-title">Sources Reference Image</span>
+                        <span class="panel-badge">Image Gen</span>
+                    </div>
+                    <div class="panel-body">
+                        <!-- Auto-queued sources by school -->
+                        <div id="sourcesQueueContainer">
+                            <div class="form-label" style="margin-bottom: 8px;">Ready to Generate (from completed images)</div>
+                            <div id="sourcesQueueList">
+                                <div class="url-list-empty" style="padding: 16px;">Generate images first to auto-populate sources</div>
+                            </div>
+                        </div>
+                        
+                        <div style="border-top: 1px solid var(--border); margin: 20px 0; padding-top: 16px;">
+                            <div class="form-label" style="margin-bottom: 12px;">Or add URLs manually</div>
+                            <div class="form-group">
+                                <label class="form-label">School</label>
+                                <select class="form-select" id="sourcesSchool">
+                                    {% for key, school in schools.items() %}
+                                    <option value="{{ key }}">{{ school.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Source URLs</label>
+                                <div class="url-list" id="sourcesList">
+                                    <div class="url-list-empty">Add URLs below</div>
+                                </div>
+                                <div class="url-add-row">
+                                    <input type="url" class="form-input" id="sourcesUrlInput" 
+                                           placeholder="https://example.com/source">
+                                    <button class="btn btn-add" onclick="addSourceUrl()">Add</button>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary btn-full" onclick="submitSourcesImage()">
+                                Generate Sources Image
+                            </button>
+                        </div>
+                        <div class="result-box" id="sourcesResult">
+                            <div class="result-title">Generated Image</div>
+                            <div id="sourcesResultContent"></div>
+                        </div>
                     </div>
                 </div>
             </div>
+        </main>
+    </div>
 
-            <div style="margin-top: 20px;">
-                <button type="button" class="btn" id="save-report-btn" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); margin-bottom: 10px;">
-                    💾 Save Changes
-                </button>
-                <button type="button" class="btn" id="generate-images-btn">
-                    🎨 Generate WeChat Images
-                </button>
-                
-                <div id="image-generation-status" style="display: none; margin-top: 15px;"></div>
-                
-                <div id="download-section" style="display: none; margin-top: 20px;">
-                    <button type="button" class="btn" id="download-zip-btn" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
-                        📦 Download Images as ZIP
-                    </button>
-                </div>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Task Detail Modal -->
+    <div class="modal-overlay" id="taskModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">Task Details</span>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
             </div>
+            <div class="modal-body">
+                <pre id="modalContent"></pre>
+            </div>
+        </div>
+    </div>
 
-            <div style="margin-top: 20px;">
-                <button type="button" class="btn" id="start-new-btn" onclick="startNewCollection()">
-                    🔄 Start New Collection
-                </button>
+    <!-- Image Preview Modal -->
+    <div class="image-modal-overlay" id="imageModal" onclick="closeImageModal(event)">
+        <button class="image-modal-close" onclick="closeImageModal()">&times;</button>
+        <div class="image-modal" onclick="event.stopPropagation()">
+            <div class="image-modal-title" id="imageModalTitle"></div>
+            <img class="image-modal-img" id="imageModalImg" src="" alt="Preview">
+            <div class="image-modal-actions">
+                <a class="image-modal-btn" id="imageModalDownload" href="" download>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
+                    </svg>
+                    Download
+                </a>
+                <button class="image-modal-btn secondary" onclick="closeImageModal()">Close</button>
             </div>
         </div>
     </div>
 
     <script>
-        const form = document.getElementById('config-form');
-        const startBtn = document.getElementById('start-btn');
-        const progressContainer = document.getElementById('progress-container');
-        const progressBar = document.getElementById('progress-bar');
-        const currentStep = document.getElementById('current-step');
-        const articlesFound = document.getElementById('articles-found');
-        const articlesProcessed = document.getElementById('articles-processed');
-        const reportsGenerated = document.getElementById('reports-generated');
-        const logContainer = document.getElementById('log-container');
-        const resultMessage = document.getElementById('result-message');
-        const reportReviewContainer = document.getElementById('report-review-container');
-        const generateImagesBtn = document.getElementById('generate-images-btn');
+        // State
+        let tasks = {};
+        let sourceUrls = [];
+        let currentFilter = 'all';
+        let currentSchoolFilter = null;
+        
+        // Sources queue by school (auto-populated from completed image tasks)
+        // { school: [{ url, title, taskId }] }
+        let sourcesQueue = {};
+        
+        // Track which task IDs have been used for sources image generation
+        let usedSourceTaskIds = new Set();
+        
+        // Flag for sequential processing
+        let isProcessingQueue = false;
 
-        let eventSource = null;
-        let currentReportFilename = null;
-        let currentReportData = null;  // Store the report data for editing
-        let currentEditMode = 'title';  // 'title' or 'content'
-        let currentEditingIndex = null;
-
-        function addLog(message) {
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            const timestamp = new Date().toLocaleTimeString();
-            entry.textContent = `[${timestamp}] ${message}`;
-            logContainer.appendChild(entry);
-            logContainer.scrollTop = logContainer.scrollHeight;
+        // Toast notifications
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
         }
 
-        function updateProgress(data) {
-            console.log('[PROGRESS] Update received:', data);
+        // Task filtering
+        function setTaskFilter(filter) {
+            currentFilter = filter;
+            currentSchoolFilter = null;
             
-            const progress = data.progress || 0;
-            progressBar.style.width = progress + '%';
-            progressBar.textContent = Math.round(progress) + '%';
-            
-            if (data.message) {
-                currentStep.textContent = data.message;
-                addLog(data.message);
-            }
-
-            articlesFound.textContent = data.articles_found || 0;
-            articlesProcessed.textContent = data.articles_processed || 0;
-            reportsGenerated.textContent = data.reports_generated || 0;
-            
-            console.log(`[PROGRESS] Progress: ${progress}%, Found: ${data.articles_found}, Processed: ${data.articles_processed}, Generated: ${data.reports_generated}`);
-
-            // Check if complete
-            if (progress >= 100) {
-                console.log('[PROGRESS] Job complete!');
-                startBtn.disabled = false;
-                startBtn.textContent = '🚀 Start News Collection';
-                
-                if (data.reports_generated > 0) {
-                    resultMessage.innerHTML = `
-                        <div class="success">
-                            <strong>✅ Success!</strong> Generated ${data.reports_generated} news reports.
-                            Reports saved as JSON. Review, edit, and optionally generate WeChat images below.
-                        </div>
-                    `;
-                    
-                    // Show review section after a brief delay
-                    setTimeout(() => {
-                        loadLatestReport();
-                    }, 1000);
-                } else {
-                    resultMessage.innerHTML = `
-                        <div class="info-box">
-                            <strong>ℹ️ Complete</strong> No suitable articles found for the selected criteria.
-                        </div>
-                    `;
-                }
-
-                if (eventSource) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-            }
-        }
-
-        async function loadLatestReport() {
-            console.log('[REPORT] Loading latest report...');
-            try {
-                // Get list of reports
-                console.log('[REPORT] Fetching reports list from /api/reports');
-                const response = await fetch('/api/reports');
-                
-                console.log('[REPORT] Response status:', response.status);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const data = await response.json();
-                console.log('[REPORT] Reports data:', data);
-                
-                if (data.error) {
-                    console.error('[REPORT] Server error:', data.error);
-                    addLog('⚠️ Error loading reports: ' + data.error);
-                    return;
-                }
-                
-                if (data.reports && data.reports.length > 0) {
-                    // Get the most recent report
-                    const latestReport = data.reports[0];
-                    currentReportFilename = latestReport.filename;
-                    console.log('[REPORT] Loading report:', latestReport.filename, 'size:', latestReport.size, 'modified:', latestReport.modified);
-                    addLog('📄 Loading report: ' + latestReport.filename);
-                    
-                    // Fetch the report content
-                    console.log('[REPORT] Fetching report content from:', `/api/reports/${latestReport.filename}`);
-                    const reportResponse = await fetch(`/api/reports/${latestReport.filename}`);
-                    
-                    console.log('[REPORT] Report response status:', reportResponse.status);
-                    if (!reportResponse.ok) {
-                        throw new Error(`HTTP ${reportResponse.status}: ${reportResponse.statusText}`);
-                    }
-                    
-                    const reportData = await reportResponse.json();
-                    console.log('[REPORT] Report loaded successfully, items:', reportData.length);
-                    addLog('✅ Report loaded: ' + reportData.length + ' articles');
-                    
-                    displayReport(reportData, latestReport);
-                } else {
-                    console.log('[REPORT] No reports available');
-                    addLog('ℹ️ No reports found');
-                }
-            } catch (error) {
-                console.error('[REPORT] Failed to load report:', error);
-                console.error('[REPORT] Error details:', error.message, error.stack);
-                addLog('❌ Failed to load report: ' + error.message);
-            }
-        }
-
-        function displayReport(reportData, reportMeta) {
-            console.log('[DISPLAY] Displaying report:', reportMeta ? reportMeta.filename : 'no meta');
-            console.log('[DISPLAY] Report items:', reportData.length);
-            
-            // Store report data for editing
-            currentReportData = JSON.parse(JSON.stringify(reportData));  // Deep copy
-            console.log('[DISPLAY] Report data stored for editing');
-            
-            // Show report review container
-            reportReviewContainer.style.display = 'block';
-            
-            // Update summary
-            const summary = document.getElementById('report-summary');
-            summary.textContent = `${reportData.length} articles collected and translated to Chinese`;
-            
-            // Populate article selector
-            const articleSelector = document.getElementById('article-selector');
-            articleSelector.innerHTML = '<option value="">Select an article...</option>';
-            reportData.forEach((item, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                option.textContent = `${index + 1}. ${item.chinese_title.substring(0, 50)}...`;
-                articleSelector.appendChild(option);
+            // Update filter button states
+            document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
             });
             
-            // Display report items (editable)
-            const detailsContainer = document.getElementById('report-details');
-            detailsContainer.innerHTML = '';
+            // Show/hide school filters
+            const schoolContainer = document.getElementById('schoolFilterContainer');
+            if (filter === 'image') {
+                updateSchoolFilters();
+                schoolContainer.style.display = 'block';
+            } else {
+                schoolContainer.style.display = 'none';
+            }
             
-            reportData.forEach((item, index) => {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'report-item';
-                itemDiv.setAttribute('data-index', index);
-                itemDiv.innerHTML = `
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #667eea;">Chinese Title:</label>
-                        <input type="text" class="editable-title" data-index="${index}" value="${item.chinese_title.replace(/"/g, '&quot;')}" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px;">
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #667eea;">Chinese Content:</label>
-                        <textarea class="editable-content" data-index="${index}" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; min-height: 150px; font-family: inherit;">${item.refined_chinese_news_report.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
-                    </div>
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
-                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Original:</strong> ${item.original_title}</p>
-                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Date:</strong> ${item.reported_publication_date}</p>
-                        <p class="url" style="margin: 5px 0;"><strong>Source:</strong> ${item.source_url}</p>
+            renderTasks();
+        }
+        
+        function setSchoolFilter(school) {
+            currentSchoolFilter = currentSchoolFilter === school ? null : school;
+            
+            // Update school filter button states
+            document.querySelectorAll('.filter-btn.school-filter').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.school === currentSchoolFilter);
+            });
+            
+            renderTasks();
+        }
+        
+        // School to folder mapping for downloads
+        const SCHOOL_FOLDERS = {
+            'NYU': 'NYU_Weekly',
+            'USC': 'USC_Weekly',
+            'EMORY': 'EMORY_Weekly',
+            'UCD': 'UCD_Weekly',
+            'UBC': 'UBC_Weekly',
+            'EDINBURGH': 'EDIN_Weekly',
+            'EDIN': 'EDIN_Weekly'
+        };
+        
+        function getSchoolFolder(school) {
+            const upperSchool = school.toUpperCase();
+            // Direct match
+            if (SCHOOL_FOLDERS[upperSchool]) return SCHOOL_FOLDERS[upperSchool];
+            // Partial match
+            if (upperSchool.includes('NYU')) return 'NYU_Weekly';
+            if (upperSchool.includes('USC')) return 'USC_Weekly';
+            if (upperSchool.includes('EMORY')) return 'EMORY_Weekly';
+            if (upperSchool.includes('EDIN')) return 'EDIN_Weekly';
+            if (upperSchool.includes('UCD') || upperSchool.includes('DAVIS')) return 'UCD_Weekly';
+            if (upperSchool.includes('UBC')) return 'UBC_Weekly';
+            return 'Generic_Weekly';
+        }
+        
+        function downloadSchoolImages(school) {
+            // Collect image paths from current session's completed tasks for this school
+            const imagePaths = [];
+            const schoolUpper = school.toUpperCase();
+            
+            Object.values(tasks).forEach(task => {
+                if ((task.type === 'text_to_image' || task.type === 'sources_image') && 
+                    task.status === 'completed' && 
+                    task.result?.image_path) {
+                    const taskSchool = (task.result.school || task.params?.school || '').toUpperCase();
+                    if (taskSchool.includes(schoolUpper) || schoolUpper.includes(taskSchool.substring(0, 4))) {
+                        imagePaths.push(task.result.image_path);
+                    }
+                }
+            });
+            
+            if (imagePaths.length === 0) {
+                showToast(`没有找到 ${school} 的图片`, 'error');
+                return;
+            }
+            
+            showToast(`正在下载 ${imagePaths.length} 张 ${school} 图片...`, 'success');
+            
+            // Download via new endpoint that accepts specific files
+            fetch('/api/download-files', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ files: imagePaths, name: `${school}_images` })
+            })
+            .then(res => res.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${school}_images.zip`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            })
+            .catch(e => {
+                showToast('下载失败', 'error');
+                console.error(e);
+            });
+        }
+        
+        function updateSchoolFilters() {
+            const container = document.getElementById('schoolFilterContainer');
+            const schools = new Set();
+            
+            Object.values(tasks).forEach(task => {
+                if (task.type === 'text_to_image' || task.type === 'gdoc_to_images' || task.type === 'sources_image') {
+                    const school = task.result?.school || task.params?.school;
+                    if (school) schools.add(school.toUpperCase());
+                }
+            });
+            
+            if (schools.size === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            container.innerHTML = `
+                <div class="task-filters" style="flex-wrap: wrap; gap: 6px;">
+                    ${Array.from(schools).map(school => {
+                        const schoolLower = school.toLowerCase();
+                        let schoolClass = '';
+                        if (schoolLower.includes('nyu')) schoolClass = 'nyu';
+                        else if (schoolLower.includes('usc')) schoolClass = 'usc';
+                        else if (schoolLower.includes('edin')) schoolClass = 'edin';
+                        else if (schoolLower.includes('ucd') || schoolLower.includes('davis')) schoolClass = 'ucd';
+                        else if (schoolLower.includes('emory')) schoolClass = 'emory';
+                        else if (schoolLower.includes('ubc')) schoolClass = 'ubc';
+                        
+                        return `<button class="filter-btn school-filter ${schoolClass} ${currentSchoolFilter === school ? 'active' : ''}" 
+                                        data-school="${school}" 
+                                        onclick="setSchoolFilter('${school}')">${school.substring(0,4)}</button>`;
+                    }).join('')}
+                </div>
+                <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${Array.from(schools).map(school => {
+                        return `<button class="school-download-btn" onclick="downloadSchoolImages('${school}'); event.stopPropagation();" title="下载 ${school} 全部图片">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            ${school.substring(0,4)}
+                        </button>`;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        // Task rendering
+        function renderTasks() {
+            const container = document.getElementById('taskContainer');
+            let taskList = Object.values(tasks).sort((a, b) => 
+                new Date(b.created_at) - new Date(a.created_at)
+            );
+            
+            // Apply filters
+            if (currentFilter === 'url_to_doc') {
+                taskList = taskList.filter(t => t.type === 'url_to_doc');
+            } else if (currentFilter === 'image') {
+                taskList = taskList.filter(t => 
+                    t.type === 'text_to_image' || t.type === 'gdoc_to_images' || t.type === 'sources_image'
+                );
+                
+                // Apply school filter if set
+                if (currentSchoolFilter) {
+                    taskList = taskList.filter(t => {
+                        const school = (t.result?.school || t.params?.school || '').toUpperCase();
+                        return school.includes(currentSchoolFilter);
+                    });
+                }
+            }
+            
+            if (taskList.length === 0) {
+                const msg = currentFilter === 'all' 
+                    ? 'No tasks yet. Start by adding a URL or content.'
+                    : `No ${currentFilter === 'url_to_doc' ? 'document' : 'image'} tasks found.`;
+                container.innerHTML = `<div class="task-empty">${msg}</div>`;
+                return;
+            }
+            
+            container.innerHTML = taskList.map(task => {
+                const progressClass = task.status === 'completed' ? 'complete' : 
+                                     task.status === 'error' ? 'error' : '';
+                
+                // Type badge configuration
+                const typeBadges = {
+                    'url_to_doc': { label: 'DOC', class: 'url-doc' },
+                    'text_to_image': { label: 'IMG', class: 'text-img' },
+                    'sources_image': { label: 'SRC', class: 'sources' },
+                    'gdoc_to_images': { label: 'IMG', class: 'doc-img' }
+                };
+                const typeBadge = typeBadges[task.type] || { label: '?', class: 'default' };
+                
+                // Get display title
+                let displayTitle = '';
+                if (task.result) {
+                    displayTitle = task.result.chinese_title || task.result.title || '';
+                }
+                if (!displayTitle && task.params) {
+                    displayTitle = task.params.title || task.params.url || 
+                                   task.params.doc_id || `${task.params.url_count || 0} URLs`;
+                }
+                
+                // Icon based on task type
+                const iconSvg = task.type === 'url_to_doc' 
+                    ? `<svg class="task-icon doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                         <path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>
+                       </svg>`
+                    : `<svg class="task-icon img" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                         <circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+                       </svg>`;
+                
+                // School badge
+                const school = task.result?.school || task.params?.school || '';
+                const schoolLower = school.toLowerCase();
+                let schoolClass = 'default';
+                let schoolLabel = school.toUpperCase().substring(0, 4);
+                if (schoolLower.includes('nyu')) { schoolClass = 'nyu'; schoolLabel = 'NYU'; }
+                else if (schoolLower.includes('usc')) { schoolClass = 'usc'; schoolLabel = 'USC'; }
+                else if (schoolLower.includes('edin')) { schoolClass = 'edin'; schoolLabel = 'EDIN'; }
+                else if (schoolLower.includes('davis') || schoolLower.includes('ucd')) { schoolClass = 'ucd'; schoolLabel = 'UCD'; }
+                const schoolBadge = school ? `<span class="task-badge task-badge-school ${schoolClass}">${schoolLabel}</span>` : '';
+                
+                // Check if we have a Google Doc link
+                const hasGdoc = task.result && task.result.doc_link;
+                const hasMultiImages = task.type === 'gdoc_to_images' && task.status === 'completed' && task.result?.files?.length;
+                // Single image from text_to_image or sources_image
+                const hasSingleImage = (task.type === 'text_to_image' || task.type === 'sources_image') && 
+                                       task.status === 'completed' && task.result?.image_path;
+                
+                // Click handler for image tasks
+                let clickHandler = '';
+                if (hasMultiImages) {
+                    clickHandler = `onclick="scrollToImagePreview('${task.id}')"`;
+                } else if (hasSingleImage) {
+                    clickHandler = `onclick="showImagePreview('${task.id}')"`;
+                }
+                
+                return `
+                    <div class="task-item ${task.status}" ${clickHandler} style="${hasSingleImage || hasMultiImages ? 'cursor: pointer;' : ''}">
+                        <span class="task-badge task-badge-type ${typeBadge.class}">${typeBadge.label}</span>
+                        ${schoolBadge}
+                        <div class="task-header">
+                            <button class="task-close" onclick="deleteTask('${task.id}', event)" title="Remove task">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 6L6 18M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="task-title-row">
+                            ${iconSvg}
+                            <div class="task-title">${displayTitle}</div>
+                        </div>
+                        <div class="task-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill ${progressClass}" style="width: ${task.progress}%"></div>
+                            </div>
+                            <span class="progress-text">${task.progress}%</span>
+                        </div>
+                        <div class="task-actions">
+                            ${hasGdoc ? `<a class="task-btn gdoc" href="${task.result.doc_link}" target="_blank" onclick="event.stopPropagation()">Google Doc</a>` : ''}
+                            ${hasMultiImages ? `<button class="task-btn" onclick="scrollToImagePreview('${task.id}'); event.stopPropagation();">Preview</button>` : ''}
+                            ${hasSingleImage ? `<button class="task-btn" onclick="showImagePreview('${task.id}'); event.stopPropagation();">Preview</button>` : ''}
+                            <button class="task-btn" onclick="showTaskDetail('${task.id}'); event.stopPropagation();">JSON</button>
+                        </div>
                     </div>
                 `;
-                detailsContainer.appendChild(itemDiv);
-            });
+            }).join('');
             
-            // Setup edit mode buttons
-            document.querySelectorAll('.edit-mode-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    document.querySelectorAll('.edit-mode-btn').forEach(b => b.classList.remove('active'));
-                    this.classList.add('active');
-                    currentEditMode = this.dataset.mode;
-                });
-            });
+            // Update doc queue after rendering tasks
+            updateDocQueue();
+            // Update sources queue from completed image tasks
+            updateSourcesQueue();
+            // Update school filters if on image filter
+            if (currentFilter === 'image') {
+                updateSchoolFilters();
+            }
+        }
+
+        // Subscribe to task updates via SSE
+        function subscribeToTask(taskId, onComplete) {
+            const eventSource = new EventSource(`/api/tasks/${taskId}/stream`);
             
-            // Setup article selector
-            articleSelector.addEventListener('change', function() {
-                const index = parseInt(this.value);
-                if (index >= 0) {
-                    currentEditingIndex = index;
-                    document.getElementById('edit-mode-selector').style.display = 'block';
-                    document.getElementById('chat-interface').style.display = 'block';
-                } else {
-                    currentEditingIndex = null;
-                    document.getElementById('edit-mode-selector').style.display = 'none';
-                    document.getElementById('chat-interface').style.display = 'none';
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'heartbeat') return;
+                
+                tasks[taskId] = data;
+                renderTasks();
+                
+                if (data.status === 'completed') {
+                    eventSource.close();
+                    showToast('Task completed successfully');
+                    if (onComplete) onComplete(data);
+                } else if (data.status === 'error') {
+                    eventSource.close();
+                    showToast(data.error || 'Task failed', 'error');
                 }
-            });
+            };
             
-            // Scroll to review section
-            reportReviewContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-
-        // Handle save report
-        const saveReportBtn = document.getElementById('save-report-btn');
-        if (saveReportBtn) {
-            saveReportBtn.addEventListener('click', async () => {
-                if (!currentReportFilename || !currentReportData) {
-                    alert('No report data to save.');
-                    return;
-                }
-                
-                // Update report data from editable fields
-                document.querySelectorAll('.editable-title').forEach(input => {
-                    const index = parseInt(input.dataset.index);
-                    currentReportData[index].chinese_title = input.value;
-                });
-                
-                document.querySelectorAll('.editable-content').forEach(textarea => {
-                    const index = parseInt(textarea.dataset.index);
-                    currentReportData[index].refined_chinese_news_report = textarea.value;
-                });
-                
-                saveReportBtn.disabled = true;
-                saveReportBtn.textContent = '⏳ Saving...';
-                
-                try {
-                    const response = await fetch('/api/save-report', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            report_filename: currentReportFilename,
-                            report_data: currentReportData
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (response.ok) {
-                        saveReportBtn.textContent = '✅ Saved!';
-                        setTimeout(() => {
-                            saveReportBtn.textContent = '💾 Save Changes';
-                            saveReportBtn.disabled = false;
-                        }, 2000);
-                    } else {
-                        throw new Error(result.error || 'Failed to save');
-                    }
-                } catch (error) {
-                    alert('Failed to save: ' + error.message);
-                    saveReportBtn.disabled = false;
-                    saveReportBtn.textContent = '💾 Save Changes';
-                }
-            });
-        }
-
-        // Handle AI edit
-        const aiEditBtn = document.getElementById('ai-edit-btn');
-        if (aiEditBtn) {
-            aiEditBtn.addEventListener('click', async () => {
-                if (currentEditingIndex === null) {
-                    alert('Please select an article first.');
-                    return;
-                }
-                
-                const prompt = document.getElementById('ai-prompt-input').value.trim();
-                if (!prompt) {
-                    alert('Please enter an editing prompt.');
-                    return;
-                }
-                
-                const article = currentReportData[currentEditingIndex];
-                const textToEdit = currentEditMode === 'title' 
-                    ? article.chinese_title 
-                    : article.refined_chinese_news_report;
-                
-                aiEditBtn.disabled = true;
-                aiEditBtn.textContent = '⏳ Processing...';
-                
-                const statusDiv = document.getElementById('ai-edit-status');
-                statusDiv.style.display = 'block';
-                statusDiv.className = 'progress-status';
-                statusDiv.innerHTML = '<p>🤖 AI is editing your text...</p>';
-                
-                try {
-                    const response = await fetch('/api/ai-edit', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            text: textToEdit,
-                            prompt: prompt,
-                            article_index: currentEditingIndex
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (response.ok) {
-                        // Update the appropriate field
-                        if (currentEditMode === 'title') {
-                            const titleInput = document.querySelector(`.editable-title[data-index="${currentEditingIndex}"]`);
-                            titleInput.value = result.edited_text;
-                            currentReportData[currentEditingIndex].chinese_title = result.edited_text;
-                        } else {
-                            const contentTextarea = document.querySelector(`.editable-content[data-index="${currentEditingIndex}"]`);
-                            contentTextarea.value = result.edited_text;
-                            currentReportData[currentEditingIndex].refined_chinese_news_report = result.edited_text;
-                        }
-                        
-                        statusDiv.className = 'success';
-                        statusDiv.innerHTML = '<p>✅ Text edited successfully! Review and save if you\'re happy with the changes.</p>';
-                        
-                        // Clear prompt
-                        document.getElementById('ai-prompt-input').value = '';
-                    } else {
-                        throw new Error(result.error || 'Failed to edit text');
-                    }
-                } catch (error) {
-                    statusDiv.className = 'error';
-                    statusDiv.innerHTML = `<p>❌ Error: ${error.message}</p>`;
-                } finally {
-                    aiEditBtn.disabled = false;
-                    aiEditBtn.textContent = '✨ Apply AI Edit';
-                }
-            });
-        }
-
-        // Handle image generation
-        if (generateImagesBtn) {
-            generateImagesBtn.addEventListener('click', async () => {
-                if (!currentReportFilename) {
-                    alert('No report file selected. Please run news collection first.');
-                    return;
-                }
-                
-                // Validate report data before generating images
-                if (!currentReportData || !Array.isArray(currentReportData)) {
-                    alert('Invalid report data. Please try reloading the page.');
-                    return;
-                }
-                
-                if (currentReportData.length === 0) {
-                    alert('No articles to generate images for.');
-                    return;
-                }
-                
-                // Count valid articles (with Chinese content and no failure markers)
-                const validArticles = currentReportData.filter(article => {
-                    if (!article) return false;
-                    const title = (article.chinese_title || '').trim();
-                    const content = (article.refined_chinese_news_report || '').trim();
-                    
-                    // Check minimum content length and no failure markers
-                    return title.length > 2 && 
-                           content.length > 10 &&
-                           !title.includes('失败') &&
-                           !content.includes('失败') &&
-                           !title.toLowerCase().includes('failed') &&
-                           !content.toLowerCase().includes('failed');
-                });
-                
-                if (validArticles.length === 0) {
-                    alert(`Cannot generate images: No valid articles with Chinese translations found.\nTotal articles: ${currentReportData.length}\nValid articles: 0\n\nPlease ensure articles have been properly translated to Chinese.`);
-                    return;
-                }
-                
-                console.log(`Image generation: ${validArticles.length} valid articles out of ${currentReportData.length} total`);
-                
-                generateImagesBtn.disabled = true;
-                generateImagesBtn.textContent = '⏳ Generating Images...';
-                
-                const statusDiv = document.getElementById('image-generation-status');
-                statusDiv.style.display = 'block';
-                statusDiv.className = 'progress-status';
-                statusDiv.innerHTML = `<p>🎨 Generating WeChat-style images from JSON report...</p><p>⏱️ This may take 2-3 minutes...</p><p>📊 Valid articles to process: ${validArticles.length}</p>`;
-                
-                // Update report data from editable fields before generating
-                if (currentReportData) {
-                    document.querySelectorAll('.editable-title').forEach(input => {
-                        const index = parseInt(input.dataset.index);
-                        currentReportData[index].chinese_title = input.value;
-                    });
-                    
-                    document.querySelectorAll('.editable-content').forEach(textarea => {
-                        const index = parseInt(textarea.dataset.index);
-                        currentReportData[index].refined_chinese_news_report = textarea.value;
-                    });
-                }
-                
-                try {
-                    const response = await fetch('/api/generate-images', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            report_filename: currentReportFilename,
-                            report_data: currentReportData  // Send edited data
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (response.ok) {
-                        statusDiv.className = 'success';
-                        statusDiv.innerHTML = `
-                            <strong>✅ Success!</strong>
-                            <p>${result.message}</p>
-                            <p>🎨 <strong>School:</strong> ${result.school}</p>
-                            <p>📁 <strong>Output:</strong> <code>${result.output_dir}</code></p>
-                            <p>📊 <strong>Total Images:</strong> ${result.total_images}</p>
-                            <p style="margin-top: 10px; font-size: 0.9rem;">
-                                Images are saved to the <code>wechat_images/</code> folder in your project directory.
-                                You can now use these images on WeChat, social media, or newsletters!
-                            </p>
-                        `;
-                        generateImagesBtn.textContent = '✅ Images Generated';
-                        
-                        // Show download section
-                        const downloadSection = document.getElementById('download-section');
-                        downloadSection.style.display = 'block';
-                        
-                        // Setup download button
-                        const downloadBtn = document.getElementById('download-zip-btn');
-                        downloadBtn.onclick = () => {
-                            const outputDir = result.output_dir.replace(/^wechat_images[\\\/]/, '');
-                            window.location.href = `/api/download-images/${outputDir}`;
-                        };
-                    } else {
-                        throw new Error(result.error || 'Failed to generate images');
-                    }
-                } catch (error) {
-                    statusDiv.className = 'error';
-                    statusDiv.innerHTML = `
-                        <strong>❌ Error:</strong>
-                        <p>${error.message}</p>
-                        <p style="font-size: 0.9rem; margin-top: 10px;">
-                            Make sure pyppeteer is installed: <code>pip install pyppeteer</code>
-                        </p>
-                    `;
-                    generateImagesBtn.disabled = false;
-                    generateImagesBtn.textContent = '🎨 Generate WeChat Images';
-                }
-            });
-        }
-
-        function startNewCollection() {
-            // Reset everything
-            reportReviewContainer.style.display = 'none';
-            progressContainer.classList.remove('active');
-            resultMessage.innerHTML = '';
-            currentReportFilename = null;
-            currentReportData = null;
-            currentEditingIndex = null;
-            document.getElementById('article-selector').value = '';
-            document.getElementById('edit-mode-selector').style.display = 'none';
-            document.getElementById('chat-interface').style.display = 'none';
-            document.getElementById('download-section').style.display = 'none';
-            
-            // Scroll to top
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function startProgressStream() {
-            if (eventSource) {
-                console.log('[SSE] Closing existing EventSource connection');
+            eventSource.onerror = () => {
                 eventSource.close();
-            }
-
-            console.log('[SSE] Opening new EventSource connection to /api/progress');
-            eventSource = new EventSource('/api/progress');
-            let messageCount = 0;
-            let lastHeartbeat = Date.now();
-            
-            eventSource.onopen = function(event) {
-                console.log('[SSE] Connection opened successfully');
-                addLog('📡 Connected to progress stream');
-            };
-            
-            eventSource.onmessage = function(event) {
-                messageCount++;
-                console.log(`[SSE] Message #${messageCount} received:`, event.data.substring(0, 100) + '...');
-                
-                try {
-                    const data = JSON.parse(event.data);
-                    
-                    // Handle heartbeat messages
-                    if (data.type === 'heartbeat') {
-                        lastHeartbeat = Date.now();
-                        console.log('[SSE] Heartbeat received, queue_size:', data.queue_size, 'running:', data.running, 'progress:', data.progress);
-                        // Update progress bar even from heartbeat
-                        if (data.progress !== undefined) {
-                            progressBar.style.width = data.progress + '%';
-                            progressBar.textContent = Math.round(data.progress) + '%';
-                        }
-                        return;
-                    }
-                    
-                    // Handle complete message
-                    if (data.type === 'complete') {
-                        console.log('[SSE] Complete message received:', data);
-                        addLog('✅ ' + data.message);
-                        if (data.reports_generated > 0) {
-                            setTimeout(() => {
-                                loadLatestReport();
-                            }, 500);
-                        }
-                        // Close the SSE connection
-                        eventSource.close();
-                        eventSource = null;
-                        return;
-                    }
-                    
-                    updateProgress(data);
-                } catch (e) {
-                    console.error('[SSE] Failed to parse message:', e, 'Data:', event.data);
-                }
-            };
-
-            eventSource.onerror = function(error) {
-                console.error('[SSE] EventSource error:', error);
-                console.log('[SSE] ReadyState:', eventSource.readyState);
-                // 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
-                
-                if (eventSource.readyState === 2) {
-                    console.log('[SSE] Connection closed');
-                    addLog('❌ Connection closed');
-                    
-                    // Only try to reconnect if job is still running
-                    setTimeout(async () => {
-                        try {
-                            const statusResp = await fetch('/api/status');
-                            const status = await statusResp.json();
-                            if (status.running) {
-                                console.log('[SSE] Job still running, reconnecting...');
-                                addLog('🔄 Reconnecting to progress stream...');
-                                startProgressStream();
-                            } else {
-                                console.log('[SSE] Job no longer running, not reconnecting');
-                            }
-                        } catch (e) {
-                            console.error('[SSE] Failed to check status:', e);
-                        }
-                    }, 2000);
-                } else {
-                    addLog('❌ Connection error. Reconnecting...');
-                }
             };
         }
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        // Sequential task processing - wait for each task to complete before starting next
+        function waitForTaskCompletion(taskId) {
+            return new Promise((resolve) => {
+                // Use polling instead of SSE for more reliable completion detection
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch(`/api/tasks/${taskId}`);
+                        const data = await res.json();
+                        
+                        if (data.error) {
+                            clearInterval(pollInterval);
+                            resolve(null);
+                            return;
+                        }
+                        
+                        // Update task in state
+                        tasks[taskId] = data;
+                        renderTasks();
+                        
+                        if (data.status === 'completed' || data.status === 'error') {
+                            clearInterval(pollInterval);
+                            resolve(data);
+                        }
+                    } catch (e) {
+                        // Keep polling on error
+                        console.error('Poll error:', e);
+                    }
+                }, 1000); // Poll every 1 second
+                
+                // Timeout after 5 minutes
+                setTimeout(() => {
+                    clearInterval(pollInterval);
+                    resolve(null);
+                }, 300000);
+            });
+        }
+        
+        // Queue for pending task batches
+        let pendingBatches = [];
+        
+        async function processTasksSequentially(pendingTasks) {
+            // Add to pending batches
+            pendingBatches.push(...pendingTasks);
             
-            console.log('[FORM] Form submitted');
+            // If already processing, new tasks will be picked up by the loop
+            if (isProcessingQueue) return;
+            isProcessingQueue = true;
+            
+            try {
+                while (pendingBatches.length > 0) {
+                    const taskConfig = pendingBatches.shift();
+                    const placeholderId = taskConfig.placeholderId;
+                    
+                    try {
+                        // Update placeholder to show it's starting
+                        if (tasks[placeholderId]) {
+                            tasks[placeholderId].message = 'Starting...';
+                            renderTasks();
+                        }
+                        
+                        const res = await fetch(taskConfig.endpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(taskConfig.body)
+                        });
+                        const data = await res.json();
+                        
+                        if (data.error) {
+                            // Update placeholder to show error
+                            if (tasks[placeholderId]) {
+                                tasks[placeholderId].status = 'error';
+                                tasks[placeholderId].error = data.error;
+                                renderTasks();
+                            }
+                            showToast(data.error, 'error');
+                            continue;
+                        }
+                        
+                        // Remove placeholder and add real task
+                        delete tasks[placeholderId];
+                        tasks[data.task_id] = { 
+                            id: data.task_id, 
+                            type: taskConfig.type, 
+                            status: 'running', 
+                            progress: 0,
+                            params: taskConfig.params,
+                            created_at: new Date().toISOString()
+                        };
+                        renderTasks();
+                        
+                        // Wait for this task to complete before processing next
+                        await waitForTaskCompletion(data.task_id);
+                        
+                    } catch (e) {
+                        console.error('Task processing error:', e);
+                        if (tasks[placeholderId]) {
+                            tasks[placeholderId].status = 'error';
+                            tasks[placeholderId].error = 'Failed to start';
+                            renderTasks();
+                        }
+                        showToast('Failed to process task', 'error');
+                    }
+                }
+            } finally {
+                isProcessingQueue = false;
+            }
+        }
 
-            const formData = {
-                school_id: parseInt(document.getElementById('school').value),
-                start_date: document.getElementById('start-date').value,
-                end_date: document.getElementById('end-date').value,
-                max_reports: parseInt(document.getElementById('max-reports').value)
+        // API calls
+        async function submitUrlToDoc() {
+            const url = document.getElementById('urlInput').value.trim();
+            const title = document.getElementById('urlTitle').value.trim();
+            
+            if (!url) {
+                showToast('Please enter a URL', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/url-to-doc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, title })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                
+                tasks[data.task_id] = { 
+                    id: data.task_id, 
+                    type: 'url_to_doc', 
+                    status: 'pending', 
+                    progress: 0,
+                    params: { url },
+                    created_at: new Date().toISOString()
+                };
+                renderTasks();
+                
+                subscribeToTask(data.task_id);
+                
+                // Clear inputs
+                document.getElementById('urlInput').value = '';
+                document.getElementById('urlTitle').value = '';
+                showToast('Task started');
+                
+            } catch (e) {
+                showToast('Failed to start task', 'error');
+            }
+        }
+
+        async function submitGdocToImages() {
+            const docUrl = document.getElementById('gdocInput').value.trim();
+            const school = document.getElementById('gdocSchool').value || 'NYU';
+            
+            // If docs are selected from queue, use text-to-image with their stored content
+            if (selectedDocs.size > 0) {
+                // Create placeholder tasks immediately so they all show in sidebar
+                const pendingTasks = [];
+                for (const taskId of selectedDocs) {
+                    const t = tasks[taskId];
+                    if (t?.result?.chinese_title && t?.result?.chinese_report) {
+                        const placeholderId = 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                        const taskConfig = {
+                            placeholderId: placeholderId,
+                            endpoint: '/api/text-to-image',
+                            type: 'text_to_image',
+                            body: {
+                                school: school,
+                                title: t.result.chinese_title,
+                                content: t.result.chinese_report,
+                                source_url: t.result.source_url || ''
+                            },
+                            params: { title: t.result.chinese_title, school: school }
+                        };
+                        
+                        // Create placeholder in tasks immediately
+                        tasks[placeholderId] = {
+                            id: placeholderId,
+                            type: 'text_to_image',
+                            status: 'pending',
+                            progress: 0,
+                            message: 'Waiting...',
+                            params: taskConfig.params,
+                            created_at: new Date().toISOString()
+                        };
+                        
+                        pendingTasks.push(taskConfig);
+                    }
+                }
+                
+                selectedDocs.clear();
+                updateDocQueue();
+                renderTasks();
+                
+                if (pendingTasks.length > 0) {
+                    // Process tasks sequentially
+                    processTasksSequentially(pendingTasks);
+                }
+                return;
+            }
+            
+            // Otherwise use the doc URL input for gdoc-to-images (for manual URL entry)
+            if (!docUrl) {
+                showToast('Please select docs or enter a URL', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/gdoc-to-images', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ doc_url: docUrl, school })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                
+                tasks[data.task_id] = { 
+                    id: data.task_id, 
+                    type: 'gdoc_to_images', 
+                    status: 'pending', 
+                    progress: 0,
+                    params: { doc_id: docUrl.substring(0, 30) + '...' },
+                    created_at: new Date().toISOString()
+                };
+                renderTasks();
+                
+                subscribeToTask(data.task_id);
+                
+                document.getElementById('gdocInput').value = '';
+                showToast('Started image generation task');
+                
+            } catch (e) {
+                showToast('Failed to start task', 'error');
+            }
+        }
+
+        async function submitTextToImage() {
+            const school = document.getElementById('textSchool').value;
+            const title = document.getElementById('textTitle').value.trim();
+            const content = document.getElementById('textContent').value.trim();
+            const sourceUrl = document.getElementById('textSourceUrl').value.trim();
+            
+            if (!title || !content) {
+                showToast('Please enter title and content', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/text-to-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ school, title, content, source_url: sourceUrl })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                
+                tasks[data.task_id] = { 
+                    id: data.task_id, 
+                    type: 'text_to_image', 
+                    status: 'pending', 
+                    progress: 0,
+                    params: { title },
+                    created_at: new Date().toISOString()
+                };
+                renderTasks();
+                
+                subscribeToTask(data.task_id);
+                
+                showToast('Task started');
+                
+            } catch (e) {
+                showToast('Failed to start task', 'error');
+            }
+        }
+
+        // Sources URL management
+        function addSourceUrl() {
+            const input = document.getElementById('sourcesUrlInput');
+            const url = input.value.trim();
+            
+            if (!url) return;
+            if (!url.startsWith('http')) {
+                showToast('Please enter a valid URL', 'error');
+                return;
+            }
+            
+            sourceUrls.push(url);
+            input.value = '';
+            renderSourceUrls();
+        }
+
+        function removeSourceUrl(index) {
+            sourceUrls.splice(index, 1);
+            renderSourceUrls();
+        }
+
+        function renderSourceUrls() {
+            const container = document.getElementById('sourcesList');
+            
+            if (sourceUrls.length === 0) {
+                container.innerHTML = '<div class="url-list-empty">Add URLs below</div>';
+                return;
+            }
+            
+            container.innerHTML = sourceUrls.map((url, i) => `
+                <div class="url-item">
+                    <span class="url-text">${url}</span>
+                    <button class="url-remove" onclick="removeSourceUrl(${i})">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        async function submitSourcesImage() {
+            const school = document.getElementById('sourcesSchool').value;
+            
+            if (sourceUrls.length === 0) {
+                showToast('Please add at least one URL', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/sources-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ school, urls: sourceUrls })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                
+                tasks[data.task_id] = { 
+                    id: data.task_id, 
+                    type: 'sources_image', 
+                    status: 'pending', 
+                    progress: 0,
+                    params: { url_count: sourceUrls.length },
+                    created_at: new Date().toISOString()
+                };
+                renderTasks();
+                
+                subscribeToTask(data.task_id);
+                
+                // Clear URLs after submit
+                sourceUrls = [];
+                renderSourceUrls();
+                showToast('Task started');
+                
+            } catch (e) {
+                showToast('Failed to start task', 'error');
+            }
+        }
+
+        // Delete/cancel task
+        async function deleteTask(taskId, event) {
+            event.stopPropagation();
+            
+            try {
+                const res = await fetch(`/api/tasks/${taskId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    delete tasks[taskId];
+                    renderTasks();
+                    showToast('Task removed');
+                } else {
+                    showToast(data.error || 'Failed to remove task', 'error');
+                }
+            } catch (e) {
+                // Just remove from local state if API fails
+                delete tasks[taskId];
+                renderTasks();
+            }
+        }
+
+        // Task detail modal
+        function showTaskDetail(taskId) {
+            const task = tasks[taskId];
+            if (!task) return;
+            
+            document.getElementById('modalTitle').textContent = `Task: ${taskId}`;
+            document.getElementById('modalContent').textContent = JSON.stringify(task, null, 2);
+            document.getElementById('taskModal').classList.add('visible');
+        }
+
+        function closeModal() {
+            document.getElementById('taskModal').classList.remove('visible');
+        }
+
+        // Image Preview Modal
+        function showImagePreview(taskId) {
+            const task = tasks[taskId];
+            if (!task || !task.result?.image_path) {
+                showToast('No image found for this task', 'error');
+                return;
+            }
+            
+            const path = task.result.image_path;
+            const filename = path.split('/').pop();
+            // Remove wechat_images/ prefix and encode the path for URL
+            const relativePath = path.replace(/^wechat_images\//, '');
+            const encodedPath = relativePath.split('/').map(p => encodeURIComponent(p)).join('/');
+            const previewUrl = `/api/preview/${encodedPath}`;
+            const downloadUrl = `/api/download/${encodedPath}`;
+            const title = task.result?.title || task.params?.title || filename;
+            
+            const imgEl = document.getElementById('imageModalImg');
+            const downloadEl = document.getElementById('imageModalDownload');
+            
+            // Set loading state
+            imgEl.style.opacity = '0.3';
+            imgEl.alt = 'Loading...';
+            
+            // Set up load handler
+            imgEl.onload = function() {
+                imgEl.style.opacity = '1';
             };
             
-            console.log('[FORM] Form data:', formData);
-
-            // Validate form data
-            if (!formData.school_id || isNaN(formData.school_id)) {
-                addLog('❌ Error: Invalid school selection');
-                return;
-            }
-            if (!formData.start_date || !formData.end_date) {
-                addLog('❌ Error: Please select date range');
-                return;
-            }
-            if (!formData.max_reports || formData.max_reports < 1) {
-                addLog('❌ Error: Invalid max reports value');
-                return;
-            }
-
-            // Reset UI
-            progressContainer.classList.add('active');
-            startBtn.disabled = true;
-            startBtn.textContent = '⏳ Running...';
-            resultMessage.innerHTML = '';
-            logContainer.innerHTML = '';
+            // Set up error handler
+            imgEl.onerror = function() {
+                imgEl.style.opacity = '1';
+                imgEl.alt = 'Failed to load image';
+                console.error('Failed to load image:', previewUrl);
+                showToast('Failed to load image preview', 'error');
+            };
             
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
-            articlesFound.textContent = '0';
-            articlesProcessed.textContent = '0';
-            reportsGenerated.textContent = '0';
-
-            addLog('🚀 Starting news collection job...');
-            addLog(`📋 School ID: ${formData.school_id}, Dates: ${formData.start_date} to ${formData.end_date}, Max: ${formData.max_reports}`);
-
-            try {
-                console.log('[FORM] Sending POST to /api/start');
-                const response = await fetch('/api/start', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                console.log('[FORM] Response status:', response.status);
-                const result = await response.json();
-                console.log('[FORM] Response body:', result);
-
-                if (response.ok) {
-                    addLog('✅ Job started successfully' + (result.thread_id ? ` (Thread: ${result.thread_id})` : ''));
-                    console.log('[FORM] Starting progress stream');
-                    startProgressStream();
-                } else {
-                    console.error('[FORM] Job start failed:', result.error);
-                    addLog('❌ Error: ' + result.error);
-                    resultMessage.innerHTML = `<div class="error"><strong>Error:</strong> ${result.error}</div>`;
-                    startBtn.disabled = false;
-                    startBtn.textContent = '🚀 Start News Collection';
-                }
-            } catch (error) {
-                console.error('[FORM] Exception during job start:', error);
-                addLog('❌ Failed to start job: ' + error.message);
-                resultMessage.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
-                startBtn.disabled = false;
-                startBtn.textContent = '🚀 Start News Collection';
+            document.getElementById('imageModalTitle').textContent = title;
+            imgEl.src = previewUrl;
+            downloadEl.href = downloadUrl;
+            downloadEl.download = filename;
+            document.getElementById('imageModal').classList.add('visible');
+            
+            console.log('Image preview:', { path, previewUrl, downloadUrl });
+        }
+        
+        function closeImageModal(event) {
+            // If called from overlay click, only close if clicking the overlay itself
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('imageModal').classList.remove('visible');
+        }
+        
+        // Close image modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeImageModal();
+                closeModal();
             }
         });
 
-        // Check if there's already a running job on page load
-        async function checkStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const status = await response.json();
-                
-                if (status.running) {
-                    progressContainer.classList.add('active');
-                    startBtn.disabled = true;
-                    startBtn.textContent = '⏳ Running...';
-                    addLog('Reconnecting to running job...');
-                    startProgressStream();
+        // Doc Queue: show completed URL->Doc tasks for selection
+        let selectedDocs = new Set();
+        
+        function updateDocQueue() {
+            const container = document.getElementById('docQueueList');
+            const completedDocs = Object.values(tasks).filter(t => 
+                t.type === 'url_to_doc' && t.status === 'completed' && t.result?.doc_link
+            );
+            
+            if (completedDocs.length === 0) {
+                container.innerHTML = '<div class="doc-queue-empty">No documents ready. Generate from URLs first.</div>';
+                return;
+            }
+            
+            container.innerHTML = completedDocs.map(task => {
+                const title = task.result?.chinese_title || task.result?.title || 'Untitled';
+                const isSelected = selectedDocs.has(task.id);
+                return `
+                    <div class="doc-queue-item ${isSelected ? 'selected' : ''}" onclick="toggleDocSelection('${task.id}')">
+                        <div class="doc-queue-checkbox">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <path d="M20 6L9 17l-5-5"/>
+                            </svg>
+                        </div>
+                        <div class="doc-queue-text">${title}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Sources Queue Management - auto-populate from completed image tasks
+        function updateSourcesQueue() {
+            // Build sources queue from completed text_to_image tasks that haven't been used yet
+            sourcesQueue = {};
+            
+            Object.values(tasks).forEach(task => {
+                if (task.type === 'text_to_image' && task.status === 'completed' && task.result) {
+                    // Skip if this task's source has already been used for a sources image
+                    if (usedSourceTaskIds.has(task.id)) return;
+                    
+                    const school = (task.result.school || task.params?.school || 'UNKNOWN').toUpperCase();
+                    const sourceUrl = task.result.source_url || task.params?.source_url;
+                    
+                    if (sourceUrl) {
+                        if (!sourcesQueue[school]) {
+                            sourcesQueue[school] = [];
+                        }
+                        // Avoid duplicates by URL
+                        if (!sourcesQueue[school].some(s => s.url === sourceUrl)) {
+                            sourcesQueue[school].push({
+                                url: sourceUrl,
+                                title: task.result.title || task.params?.title || 'Untitled',
+                                taskId: task.id
+                            });
+                        }
+                    }
                 }
-            } catch (error) {
-                console.error('Failed to check status:', error);
+            });
+            
+            renderSourcesQueue();
+        }
+        
+        function renderSourcesQueue() {
+            const container = document.getElementById('sourcesQueueList');
+            const schools = Object.keys(sourcesQueue).filter(s => sourcesQueue[s].length > 0);
+            
+            if (schools.length === 0) {
+                container.innerHTML = '<div class="url-list-empty" style="padding: 16px;">Generate images first to auto-populate sources</div>';
+                return;
+            }
+            
+            container.innerHTML = schools.map(school => {
+                const sources = sourcesQueue[school];
+                const schoolLower = school.toLowerCase();
+                let schoolClass = '';
+                let schoolName = school;
+                
+                if (schoolLower.includes('nyu')) { schoolClass = 'nyu'; schoolName = 'New York University'; }
+                else if (schoolLower.includes('usc')) { schoolClass = 'usc'; schoolName = 'University of Southern California'; }
+                else if (schoolLower.includes('edin')) { schoolClass = 'edin'; schoolName = 'University of Edinburgh'; }
+                else if (schoolLower.includes('ucd') || schoolLower.includes('davis')) { schoolClass = 'ucd'; schoolName = 'UC Davis'; }
+                else if (schoolLower.includes('emory')) { schoolClass = 'emory'; schoolName = 'Emory University'; }
+                else if (schoolLower.includes('ubc')) { schoolClass = 'ubc'; schoolName = 'University of British Columbia'; }
+                
+                return `
+                    <div class="sources-queue-section">
+                        <div class="sources-queue-header ${schoolClass}">
+                            <span class="sources-queue-school">${schoolName}</span>
+                            <span class="sources-queue-count">${sources.length} URL${sources.length > 1 ? 's' : ''}</span>
+                        </div>
+                        <div class="sources-queue-urls">
+                            ${sources.map((s, idx) => `
+                                <div class="sources-queue-url">
+                                    <span class="sources-queue-url-text" title="${s.url}">${s.url}</span>
+                                    <button class="url-remove" onclick="removeSourceFromQueue('${school}', ${idx})" title="Remove">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M18 6L6 18M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="url-add-row" style="margin: 8px 0;">
+                            <input type="url" class="form-input" id="addUrlInput_${school}" 
+                                   placeholder="Add another URL..." style="font-size: 12px; padding: 6px 10px;">
+                            <button class="btn btn-add" onclick="addUrlToQueue('${school}')" style="padding: 6px 12px;">Add</button>
+                        </div>
+                        <button class="btn btn-primary btn-full sources-queue-generate" onclick="generateSourcesForSchool('${school}')">
+                            Generate Sources Image for ${school}
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function removeSourceFromQueue(school, index) {
+            if (sourcesQueue[school] && sourcesQueue[school][index]) {
+                // If this was from a task, mark it as used so it doesn't come back
+                const source = sourcesQueue[school][index];
+                if (source.taskId) {
+                    usedSourceTaskIds.add(source.taskId);
+                }
+                sourcesQueue[school].splice(index, 1);
+                renderSourcesQueue();
             }
         }
+        
+        function addUrlToQueue(school) {
+            const input = document.getElementById(`addUrlInput_${school}`);
+            const url = input.value.trim();
+            
+            if (!url) return;
+            if (!url.startsWith('http')) {
+                showToast('Please enter a valid URL', 'error');
+                return;
+            }
+            
+            if (!sourcesQueue[school]) {
+                sourcesQueue[school] = [];
+            }
+            
+            // Avoid duplicates
+            if (sourcesQueue[school].some(s => s.url === url)) {
+                showToast('URL already in queue', 'error');
+                return;
+            }
+            
+            sourcesQueue[school].push({
+                url: url,
+                title: 'Manual entry',
+                taskId: null  // Manual entries don't have a taskId
+            });
+            
+            input.value = '';
+            renderSourcesQueue();
+        }
+        
+        async function generateSourcesForSchool(school) {
+            const sources = sourcesQueue[school];
+            if (!sources || sources.length === 0) {
+                showToast('No sources found for this school', 'error');
+                return;
+            }
+            
+            const urls = sources.map(s => s.url);
+            
+            try {
+                const res = await fetch('/api/sources-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ school, urls })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                
+                tasks[data.task_id] = { 
+                    id: data.task_id, 
+                    type: 'sources_image', 
+                    status: 'pending', 
+                    progress: 0,
+                    params: { school, url_count: urls.length },
+                    created_at: new Date().toISOString()
+                };
+                renderTasks();
+                
+                subscribeToTask(data.task_id);
+                
+                // Mark these task IDs as used so they won't appear again
+                sources.forEach(s => usedSourceTaskIds.add(s.taskId));
+                
+                // Re-render the sources queue (will now exclude used tasks)
+                updateSourcesQueue();
+                
+                showToast(`Generating sources image for ${school}`);
+                
+            } catch (e) {
+                showToast('Failed to start task', 'error');
+            }
+        }
+        
+        function toggleDocSelection(taskId) {
+            if (selectedDocs.has(taskId)) {
+                selectedDocs.delete(taskId);
+            } else {
+                selectedDocs.add(taskId);
+            }
+            updateDocQueue();
+        }
+        
+        // Image Preview: show generated images
+        let currentPreviewTaskId = null;
+        
+        function scrollToImagePreview(taskId) {
+            const task = tasks[taskId];
+            if (!task || !task.result?.files?.length) return;
+            
+            currentPreviewTaskId = taskId;
+            const section = document.getElementById('imagePreviewSection');
+            const grid = document.getElementById('imagePreviewGrid');
+            const panel = document.getElementById('gdocPanel');
+            
+            // Build image preview
+            grid.innerHTML = task.result.files.map((file, idx) => {
+                const filename = file.split('/').pop();
+                const downloadPath = file.replace('wechat_images/', '');
+                return `
+                    <a class="image-preview-item" href="/api/download/${downloadPath}" download="${filename}" title="${filename}">
+                        <img src="/api/preview/${downloadPath}" alt="Image ${idx + 1}" loading="lazy">
+                        <div class="download-overlay">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
+                            </svg>
+                        </div>
+                    </a>
+                `;
+            }).join('');
+            
+            section.style.display = 'block';
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
 
-        checkStatus();
+        // Enter key handlers
+        document.getElementById('urlInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') submitUrlToDoc();
+        });
+        document.getElementById('gdocInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') submitGdocToImages();
+        });
+        document.getElementById('sourcesUrlInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addSourceUrl();
+        });
+
+        // Click outside modal to close
+        document.getElementById('taskModal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-overlay')) closeModal();
+        });
+
+        // Load existing tasks on page load
+        fetch('/api/tasks')
+            .then(res => res.json())
+            .then(data => {
+                if (data.tasks) {
+                    data.tasks.forEach(t => tasks[t.id] = t);
+                    renderTasks();
+                }
+            });
     </script>
 </body>
 </html>
-

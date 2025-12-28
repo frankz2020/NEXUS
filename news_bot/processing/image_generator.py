@@ -162,13 +162,13 @@ def _render_html(
     )
 
 # ================= HTML → PNG (Using Playwright) =================
-def _html_to_png_sync(html: str, out_path: Path, page_width: int, device_scale: int) -> None:
-    """Convert HTML to PNG using Playwright (synchronous API - more stable than pyppeteer)."""
-    from playwright.sync_api import sync_playwright
-    
-    # Try to find system Chrome/Chromium as fallback
+# Global browser instance for reuse
+_browser_instance = None
+_playwright_instance = None
+
+def _get_launch_kwargs():
+    """Get browser launch kwargs."""
     chrome_path = _guess_chrome_path()
-    
     launch_kwargs = {
         "headless": True,
         "args": [
@@ -180,10 +180,15 @@ def _html_to_png_sync(html: str, out_path: Path, page_width: int, device_scale: 
             "--allow-file-access-from-files",
         ],
     }
-    
-    # Use system Chrome if available (important for Railway/Docker deployments)
     if chrome_path:
         launch_kwargs["executable_path"] = chrome_path
+    return launch_kwargs
+
+def _html_to_png_sync(html: str, out_path: Path, page_width: int, device_scale: int) -> None:
+    """Convert HTML to PNG using Playwright (synchronous API - more stable than pyppeteer)."""
+    from playwright.sync_api import sync_playwright
+    
+    launch_kwargs = _get_launch_kwargs()
     
     with sync_playwright() as p:
         browser = p.chromium.launch(**launch_kwargs)
@@ -200,6 +205,44 @@ def _html_to_png_sync(html: str, out_path: Path, page_width: int, device_scale: 
             page.screenshot(path=str(out_path), full_page=True)
         finally:
             browser.close()
+
+def _html_to_png_with_browser(html: str, out_path: Path, page_width: int, device_scale: int, browser) -> None:
+    """Convert HTML to PNG using an existing browser instance (faster for batch processing)."""
+    page = browser.new_page(
+        viewport={"width": page_width, "height": 1500},
+        device_scale_factor=device_scale,
+    )
+    try:
+        page.set_content(html)
+        page.wait_for_selector("#page-root", timeout=15000)
+        page.wait_for_timeout(500)  # Reduced wait time
+        page.screenshot(path=str(out_path), full_page=True)
+    finally:
+        page.close()
+
+class BrowserContext:
+    """Context manager for batch image rendering with browser reuse."""
+    def __init__(self):
+        self.playwright = None
+        self.browser = None
+    
+    def __enter__(self):
+        from playwright.sync_api import sync_playwright
+        self.playwright = sync_playwright().start()
+        launch_kwargs = _get_launch_kwargs()
+        self.browser = self.playwright.chromium.launch(**launch_kwargs)
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.browser:
+            self.browser.close()
+        if self.playwright:
+            self.playwright.stop()
+    
+    def render(self, html: str, out_path: Path, page_width: int, device_scale: int):
+        """Render HTML to PNG using the shared browser."""
+        _html_to_png_with_browser(html, out_path, page_width, device_scale, self.browser)
+        _smart_crop_bottom_keep(out_path)
 
 # ================= 智能裁剪 =================
 def _smart_crop_bottom_keep(

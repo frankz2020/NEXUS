@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Absolute paths (per your preference)
-PROJECT_DIR="/Users/inwataru/All_My_Projects/NEXUS"
-PYTHON_BIN="/Users/inwataru/All_My_Projects/NEXUS/venv/bin/python"
+# PROJECT_DIR="/Users/inwataru/All_My_Projects/NEXUS"
+# PYTHON_BIN="/Users/inwataru/All_My_Projects/NEXUS/venv/bin/python"
 
 # Optional: allow overriding the delay in seconds via first arg; default 3600 (1 hour)
 DELAY_SECS=${1:-3600}

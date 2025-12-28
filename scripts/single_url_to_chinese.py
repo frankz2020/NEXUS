@@ -38,6 +38,7 @@ from news_bot.core import config
 from news_bot.processing import article_handler
 from news_bot.generation import summarizer
 from news_bot.localization import translator
+from news_bot.reporting import google_docs_exporter
 
 
 # Default school profile for single URL processing (generic Chinese student audience)
@@ -78,10 +79,10 @@ def process_single_url(url: str, custom_title: str = None, show_english: bool = 
     article_text = article_handler.fetch_and_extract_text(url)
     
     if not article_text:
-        print("❌ 错误: 无法抓取网页内容")
+        print("错误: 无法抓取网页内容")
         return None
     
-    print(f"✅ 成功抓取内容 ({len(article_text)} 字符, 约 {len(article_text.split())} 单词)")
+    print(f"成功抓取内容 ({len(article_text)} 字符, 约 {len(article_text.split())} 单词)")
     print()
     
     # Step 2: 生成英文摘要
@@ -112,7 +113,7 @@ def process_single_url(url: str, custom_title: str = None, show_english: bool = 
     translation_output = translator.translate_and_restyle_to_chinese(translation_input)
     
     if not translation_output:
-        print("❌ 错误: 翻译失败")
+        print("错误: 翻译失败")
         return None
     
     chinese_title = translation_output.get("chinese_title", "标题生成失败")
@@ -170,19 +171,20 @@ def main():
     parser.add_argument("--show-english", "-e", action="store_true", help="显示英文摘要")
     parser.add_argument("--save", "-s", action="store_true", help="保存结果到JSON文件")
     parser.add_argument("--output", "-o", help="输出文件路径 (默认: news_reports/single_url_*.json)")
+    parser.add_argument("--gdoc", "-g", action="store_true", help="导出到 Google Doc")
     
     args = parser.parse_args()
     
     # Validate URL
     if not args.url.startswith("http"):
-        print("❌ 错误: URL必须以 http:// 或 https:// 开头")
+        print("错误: URL必须以 http:// 或 https:// 开头")
         sys.exit(1)
     
     # Validate config
     try:
         config.validate_config()
     except ValueError as e:
-        print(f"❌ 配置错误: {e}")
+        print(f"配置错误: {e}")
         sys.exit(1)
     
     # Process URL
@@ -212,7 +214,31 @@ def main():
         
         print(f"\n💾 结果已保存到: {output_path}")
     
-    print("\n✅ 完成！")
+    # Export to Google Doc if requested
+    if args.gdoc:
+        print("\n>>> 导出到 Google Doc...")
+        # Prepare report data in the format expected by google_docs_exporter
+        report_data = [{
+            "chinese_title": result["chinese_title"],
+            "refined_chinese_news_report": result["chinese_report"],
+            "source_url": result["url"]
+        }]
+        
+        today = datetime.now().date()
+        doc_url = google_docs_exporter.update_or_create_news_document(
+            school=DEFAULT_SCHOOL_PROFILE,
+            reports_data=report_data,
+            week_start_date=today,
+            week_end_date=today,
+            is_email=True  # Use breaking news format for single article
+        )
+        
+        if doc_url:
+            print(f"\nGoogle Doc 链接: {doc_url}")
+        else:
+            print("\n导出到 Google Doc 失败")
+    
+    print("\n完成！")
 
 
 if __name__ == "__main__":

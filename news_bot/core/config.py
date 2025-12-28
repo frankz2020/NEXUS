@@ -22,9 +22,9 @@ CUSTOM_SEARCH_ENGINE_ID = os.getenv("CUSTOM_SEARCH_ENGINE_ID")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 
 # Model names for OpenRouter (using Google Gemini models via OpenRouter)
-GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", 'google/gemini-2.5-flash') 
-GEMINI_SUMMARY_MODEL = os.getenv("GEMINI_SUMMARY_MODEL", 'google/gemini-2.5-flash')
-GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", 'google/gemini-2.5-pro')
+GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", 'google/gemini-3-flash-preview') 
+GEMINI_SUMMARY_MODEL = os.getenv("GEMINI_SUMMARY_MODEL", 'google/gemini-3-flash-preview')
+GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", 'google/gemini-3-flash-preview')
 GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS = int(os.getenv("GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS", "150000"))
 
 GEMINI_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS = int(os.getenv("GEMINI_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS", "150000"))

@@ -13,6 +13,11 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
+# Add project root to path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -330,6 +335,8 @@ def render_to_images(
     skip_image_fetch: bool = False,
     school_name: str = "",
 ) -> None:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from news_bot.processing.image_generator import BrowserContext, _render_html
 
     out_root = Path(out_dir)
     
@@ -347,55 +354,71 @@ def render_to_images(
     # 命中任意一个都算 UCD（用于交替色）
     is_ucd = ("DAVIS" in upper_name) or ("UC DAVIS" in upper_name) or ("UCD" in upper_name)
 
-    # 渲染正文
-    for idx, it in enumerate(items, 1):
-        left_bar_color = None
-        # 仅 UCD：奇数蓝(#022851)，偶数黄(#FFBF00)
-        if is_ucd:
-            left_bar_color = "#022851" if (idx % 2 == 1) else "#FFBF00"
+    # ========== OPTIMIZATION 1: Parallel cover image fetching ==========
+    def fetch_cover_for_item(idx_item):
+        idx, it = idx_item
+        cover_image = it.get("cover_image") or ""
+        if not cover_image and not skip_image_fetch:
+            src_url = (it.get("source_url") or "").strip()
+            if src_url:
+                print(f"  [{idx}] Fetching cover from: {src_url[:50]}...")
+                cover_image = fetch_cover_from_source(src_url)
+        return idx, cover_image
+    
+    cover_images = {}
+    items_needing_fetch = [(i, it) for i, it in enumerate(items, 1) 
+                           if not it.get("cover_image") and not skip_image_fetch]
+    
+    if items_needing_fetch:
+        print(f"  [*] Fetching {len(items_needing_fetch)} cover images in parallel...")
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(fetch_cover_for_item, item): item for item in items_needing_fetch}
+            for future in as_completed(futures):
+                try:
+                    idx, cover = future.result()
+                    if cover:
+                        cover_images[idx] = cover
+                except Exception as e:
+                    print(f"  [!] Error fetching cover: {e}")
+    
+    # ========== OPTIMIZATION 2: Batch rendering with browser reuse ==========
+    print(f"  [*] Rendering {len(items)} images with shared browser...")
+    
+    with BrowserContext() as browser_ctx:
+        for idx, it in enumerate(items, 1):
+            left_bar_color = None
+            if is_ucd:
+                left_bar_color = "#022851" if (idx % 2 == 1) else "#FFBF00"
 
-        title = it.get("title", "").strip()
-        content = it.get("content", "").strip()
-        
-        # 获取封面图片：优先文档内图片，否则从来源页面抓取
-        cover_image = ""
-        if not skip_image_fetch:
-            cover_image = it.get("cover_image") or ""
-            # 如果文档内没有图片，尝试从来源页面抓取
-            if not cover_image:
-                src_url = (it.get("source_url") or "").strip()
-                if src_url:
-                    print(f"  [*] 文档内无图片，尝试从来源页面抓取: {src_url[:60]}...")
-                    cover_image = fetch_cover_from_source(src_url)
-                    if cover_image:
-                        print(f"  [✓] 成功抓取封面图片: {cover_image[:60]}...")
-                    else:
-                        print(f"  [!] 未能从来源页面抓取到图片")
+            title = it.get("title", "").strip()
+            content = it.get("content", "").strip()
+            
+            # Use pre-fetched cover or existing one
+            cover_image = it.get("cover_image") or cover_images.get(idx, "")
 
-        # 右上角 credits：不显示网址（设为空）
-        # src = (it.get("source_url") or "").strip()
-        # if not src:
-        #     multi = it.get("source_urls") or []
-        #     if multi:
-        #         src = multi[0]
+            out_png = school_out / f"{idx:02d}_{_slug(title)[:40]}.png"
 
-        out_png = school_out / f"{idx:02d}_{_slug(title)[:40]}.png"
+            # Render HTML
+            html = _render_html(
+                title=title,
+                content=content,
+                credits="",
+                cover_image=cover_image,
+                cover_caption="",
+                page_width=page_width,
+                min_height=2200,
+                title_size=title_size,
+                body_size=body_size,
+                marker_label="",
+                brand_color=brand_color or "#57068c",
+                left_bar_color=left_bar_color,
+            )
+            
+            # Render with shared browser
+            browser_ctx.render(html, out_png, page_width, device_scale)
+            print(f"  [✓] {idx}/{len(items)}: {title[:30]}...")
 
-        generate_image_from_article(
-            title=title,
-            content=content,
-            output_path=str(out_png),
-            credits="",  # 不显示网址
-            cover_image=cover_image,
-            page_width=page_width,
-            device_scale=device_scale,
-            title_size=title_size,
-            body_size=body_size,
-            brand_color=brand_color or "#57068c",
-            left_bar_color=left_bar_color,
-        )
-
-    # 生成“资料来源”汇总页（基于所有文章的全部链接扁平化）
+    # 生成"资料来源"汇总页（基于所有文章的全部链接扁平化）
     if top_n and top_n > 0:
         flat_urls: List[str] = []
         seen = set()
