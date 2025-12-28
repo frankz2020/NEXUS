@@ -2161,7 +2161,7 @@
         function updateDocQueue() {
             const container = document.getElementById('docQueueList');
             const completedDocs = Object.values(tasks).filter(t => 
-                t.type === 'url_to_doc' && t.status === 'completed' && t.result?.doc_link
+                t.type === 'url_to_doc' && t.status === 'completed' && t.result?.chinese_title
             );
             
             if (completedDocs.length === 0) {
