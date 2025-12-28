@@ -201,27 +201,42 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
         update_task(task_id, progress=85, message="Exporting to Google Doc...")
         doc_link = None
         doc_error = None
-        try:
-            doc_link = google_docs_exporter.update_or_create_news_document(
-                school=school_profile,
-                reports_data=[{
-                    "chinese_title": chinese_title,
-                    "refined_chinese_news_report": chinese_report,
-                    "source_url": url
-                }],
-                week_start_date=datetime.now().date(),
-                week_end_date=datetime.now().date(),
-                is_email=False
-            )
-            if doc_link:
-                logger.info(f"Google Doc created successfully: {doc_link}")
-            else:
-                doc_error = "Google Docs exporter returned None (check credentials)"
+        
+        # Check if credential files exist
+        import os
+        from news_bot.core import config
+        creds_exists = os.path.exists(config.OAUTH_CREDENTIALS_FILE)
+        token_exists = os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE)
+        logger.info(f"Credentials file exists: {creds_exists} ({config.OAUTH_CREDENTIALS_FILE})")
+        logger.info(f"Token pickle exists: {token_exists} ({config.OAUTH_TOKEN_PICKLE_FILE})")
+        
+        if not creds_exists:
+            doc_error = f"credentials.json not found at {config.OAUTH_CREDENTIALS_FILE}"
+        elif not token_exists:
+            doc_error = f"token.pickle not found at {config.OAUTH_TOKEN_PICKLE_FILE}"
+        
+        if not doc_error:
+            try:
+                doc_link = google_docs_exporter.update_or_create_news_document(
+                    school=school_profile,
+                    reports_data=[{
+                        "chinese_title": chinese_title,
+                        "refined_chinese_news_report": chinese_report,
+                        "source_url": url
+                    }],
+                    week_start_date=datetime.now().date(),
+                    week_end_date=datetime.now().date(),
+                    is_email=False
+                )
+                if doc_link:
+                    logger.info(f"Google Doc created successfully: {doc_link}")
+                else:
+                    doc_error = "Google Docs exporter returned None (check credentials)"
+                    logger.warning(doc_error)
+            except Exception as e:
+                doc_error = f"Google Docs export failed: {e}"
                 logger.warning(doc_error)
-        except Exception as e:
-            doc_error = f"Google Docs export failed: {e}"
-            logger.warning(doc_error)
-            logger.warning(traceback.format_exc())
+                logger.warning(traceback.format_exc())
         
         result = {
             "title": chinese_title,  # For sidebar display
