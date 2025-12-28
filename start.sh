@@ -95,6 +95,13 @@ fi
 
 echo ""
 echo "========================================="
+echo "FINAL FILE CHECK before starting Gunicorn"
+echo "========================================="
+echo "Current directory: $(pwd)"
+echo "Listing credential files:"
+ls -la credentials.json token.pickle 2>&1 || echo "Some files missing"
+echo ""
+echo "========================================="
 echo "Starting Gunicorn on 0.0.0.0:${PORT:-8080}"
 echo "========================================="
 
