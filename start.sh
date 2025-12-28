@@ -18,14 +18,17 @@ echo ""
 
 # Create credentials.json from environment variable if set
 echo "DEBUG: Current working directory is: $(pwd)"
-echo "DEBUG: GOOGLE_OAUTH_CREDENTIALS_JSON length: ${#GOOGLE_OAUTH_CREDENTIALS_JSON}"
+echo "DEBUG: Checking GOOGLE_OAUTH_CREDENTIALS_JSON..."
 
 if [ -n "$GOOGLE_OAUTH_CREDENTIALS_JSON" ]; then
-    echo "✅ Creating credentials.json from GOOGLE_OAUTH_CREDENTIALS_JSON env var..."
-    echo "$GOOGLE_OAUTH_CREDENTIALS_JSON" > "$(pwd)/credentials.json"
-    if [ -f "$(pwd)/credentials.json" ]; then
+    echo "✅ GOOGLE_OAUTH_CREDENTIALS_JSON is set (length: ${#GOOGLE_OAUTH_CREDENTIALS_JSON})"
+    echo "✅ Creating credentials.json using Python (safer for JSON)..."
+    # Use Python to write the JSON file - avoids shell escaping issues
+    python3 -c "import os; f=open('credentials.json','w'); f.write(os.environ['GOOGLE_OAUTH_CREDENTIALS_JSON']); f.close(); print('Written:', len(os.environ['GOOGLE_OAUTH_CREDENTIALS_JSON']), 'chars')"
+    if [ -f "credentials.json" ]; then
         echo "✅ credentials.json created at $(pwd)/credentials.json"
         echo "DEBUG: File size: $(wc -c < credentials.json) bytes"
+        echo "DEBUG: First 50 chars: $(head -c 50 credentials.json)"
     else
         echo "❌ Failed to create credentials.json"
     fi
