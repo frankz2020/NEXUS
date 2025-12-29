@@ -30,11 +30,13 @@
             --type-doc-img: #8b5cf6;
             --type-text-img: #f59e0b;
             --type-sources: #10b981;
-            /* School colors - muted but visible */
+            /* School brand colors - unified across all templates */
             --school-nyu: #57068c;
             --school-usc: #990000;
-            --school-edin: #b3b3b3;
-            --school-ucd: #002855;
+            --school-emory: #222c66;
+            --school-ucd: #022851;
+            --school-ubc: #002145;
+            --school-edin: #041e42;
             --school-default: #4a4a4a;
         }
 
@@ -91,6 +93,32 @@
             font-weight: 400;
             margin-left: 8px;
             font-size: 13px;
+        }
+
+        .guide-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .guide-link:hover {
+            background: var(--bg-elevated);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .guide-link svg {
+            opacity: 0.7;
         }
 
         .task-list {
@@ -150,10 +178,10 @@
 
         .filter-btn.school-filter.nyu { background: var(--school-nyu); border-color: var(--school-nyu); color: white; }
         .filter-btn.school-filter.usc { background: var(--school-usc); border-color: var(--school-usc); color: white; }
-        .filter-btn.school-filter.edin { background: var(--school-edin); border-color: var(--school-edin); color: #333; }
+        .filter-btn.school-filter.emory { background: var(--school-emory); border-color: var(--school-emory); color: white; }
         .filter-btn.school-filter.ucd { background: var(--school-ucd); border-color: var(--school-ucd); color: white; }
-        .filter-btn.school-filter.emory { background: #222c66; border-color: #222c66; color: white; }
-        .filter-btn.school-filter.ubc { background: #002145; border-color: #002145; color: white; }
+        .filter-btn.school-filter.ubc { background: var(--school-ubc); border-color: var(--school-ubc); color: white; }
+        .filter-btn.school-filter.edin { background: var(--school-edin); border-color: var(--school-edin); color: white; }
 
         /* School download button */
         .school-download-btn {
@@ -248,8 +276,10 @@
 
         .task-badge-school.nyu { background: var(--school-nyu); }
         .task-badge-school.usc { background: var(--school-usc); }
-        .task-badge-school.edin { background: var(--school-edin); color: #333; }
+        .task-badge-school.emory { background: var(--school-emory); }
         .task-badge-school.ucd { background: var(--school-ucd); }
+        .task-badge-school.ubc { background: var(--school-ubc); }
+        .task-badge-school.edin { background: var(--school-edin); }
         .task-badge-school.default { background: var(--school-default); }
 
         .task-header {
@@ -580,10 +610,10 @@
 
         .sources-queue-header.nyu { border-left: 3px solid var(--school-nyu); }
         .sources-queue-header.usc { border-left: 3px solid var(--school-usc); }
-        .sources-queue-header.edin { border-left: 3px solid var(--school-edin); }
+        .sources-queue-header.emory { border-left: 3px solid var(--school-emory); }
         .sources-queue-header.ucd { border-left: 3px solid var(--school-ucd); }
-        .sources-queue-header.emory { border-left: 3px solid #222c66; }
-        .sources-queue-header.ubc { border-left: 3px solid #002145; }
+        .sources-queue-header.ubc { border-left: 3px solid var(--school-ubc); }
+        .sources-queue-header.edin { border-left: 3px solid var(--school-edin); }
 
         .sources-queue-school {
             font-size: 12px;
@@ -1135,6 +1165,14 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="logo">LIVE Weekly <span>Studio</span></div>
+                <a href="/guide" class="guide-link" title="操作指南">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <path d="M12 17h.01"/>
+                    </svg>
+                    操作指南
+                </a>
             </div>
             <div class="task-list">
                 <div class="task-list-header">

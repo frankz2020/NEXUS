@@ -457,6 +457,11 @@ def index():
     """Render the main page."""
     return render_template('index.html', schools=SCHOOLS)
 
+@app.route('/guide')
+def guide():
+    """Render the interactive operation guide."""
+    return render_template('guide.html')
+
 @app.route('/health')
 def health():
     """Health check endpoint."""
@@ -715,7 +720,7 @@ def api_schools():
 # ============================================================================
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 3000))
+    port = int(os.environ.get('PORT', 3050))
     debug = os.environ.get('FLASK_ENV', 'development') != 'production'
     
     print("=" * 60)

@@ -1,0 +1,62 @@
+/*
+ * School Brand Colors - Unified Configuration
+ * This file defines all school brand colors used across NEXUS-4 templates
+ * 
+ * Source of truth: app.py SCHOOLS dictionary
+ * 
+ * Usage:
+ *   - Import this file in any template that needs school colors
+ *   - Use CSS variables: var(--school-nyu), var(--school-usc), etc.
+ *   - Never hardcode hex values directly in templates
+ * 
+ * Last updated: 2025-12-29
+ */
+
+:root {
+    /* School Brand Colors - Keep in sync with app.py SCHOOLS */
+    --school-nyu: #57068c;       /* New York University - Purple */
+    --school-usc: #990000;       /* University of Southern California - Cardinal */
+    --school-emory: #222c66;     /* Emory University - Navy Blue */
+    --school-ucd: #022851;       /* UC Davis - Blue */
+    --school-ubc: #002145;       /* University of British Columbia - Navy */
+    --school-edin: #041e42;      /* University of Edinburgh - Dark Blue */
+    --school-default: #4a4a4a;   /* Default/Unknown School - Gray */
+}
+
+/* School-specific utility classes */
+.school-nyu { color: var(--school-nyu); }
+.school-usc { color: var(--school-usc); }
+.school-emory { color: var(--school-emory); }
+.school-ucd { color: var(--school-ucd); }
+.school-ubc { color: var(--school-ubc); }
+.school-edin { color: var(--school-edin); }
+
+.bg-school-nyu { background-color: var(--school-nyu); }
+.bg-school-usc { background-color: var(--school-usc); }
+.bg-school-emory { background-color: var(--school-emory); }
+.bg-school-ucd { background-color: var(--school-ucd); }
+.bg-school-ubc { background-color: var(--school-ubc); }
+.bg-school-edin { background-color: var(--school-edin); }
+
+.border-school-nyu { border-color: var(--school-nyu); }
+.border-school-usc { border-color: var(--school-usc); }
+.border-school-emory { border-color: var(--school-emory); }
+.border-school-ucd { border-color: var(--school-ucd); }
+.border-school-ubc { border-color: var(--school-ubc); }
+.border-school-edin { border-color: var(--school-edin); }
+
+/*
+ * Color Reference Table:
+ * 
+ * School              | Code      | Hex Color | Folder
+ * --------------------|-----------|-----------|-------------
+ * NYU                 | nyu       | #57068c   | NYU_Weekly
+ * USC                 | usc       | #990000   | USC_Weekly
+ * Emory University    | emory     | #222c66   | EMORY_Weekly
+ * UC Davis            | ucd       | #022851   | UCD_Weekly
+ * UBC                 | ubc       | #002145   | UBC_Weekly
+ * Edinburgh           | edin      | #041e42   | EDIN_Weekly
+ * 
+ * Note: EDINBURGH in backend maps to 'edin' in frontend CSS
+ */
+
