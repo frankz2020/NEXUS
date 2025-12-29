@@ -11,17 +11,34 @@ from googleapiclient.errors import HttpError
 
 from ..core import config, school_config # For credentials paths and scopes
 
+import json
+import base64
+
 def _get_credentials():
     """
     Gets valid user credentials from storage or initiates OAuth2 flow.
-    The file token.pickle stores the user's access and refresh tokens, and is
-    created automatically when the authorization flow completes for the first time.
+    Supports file-based storage (token.pickle) and environment variables (for cloud deployment).
     """
     creds = None
-    if os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE):
-        with open(config.OAUTH_TOKEN_PICKLE_FILE, 'rb') as token:
-            creds = pickle.load(token)
     
+    # 1. Try loading from token.pickle (file)
+    if os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE):
+        try:
+            with open(config.OAUTH_TOKEN_PICKLE_FILE, 'rb') as token:
+                creds = pickle.load(token)
+        except Exception as e:
+            print(f"Error loading token.pickle: {e}")
+    
+    # 2. Try loading from environment variable (GOOGLE_OAUTH_TOKEN_PICKLE_BASE64)
+    if not creds and 'GOOGLE_OAUTH_TOKEN_PICKLE_BASE64' in os.environ:
+        try:
+            token_base64 = os.environ['GOOGLE_OAUTH_TOKEN_PICKLE_BASE64']
+            token_bytes = base64.b64decode(token_base64)
+            creds = pickle.loads(token_bytes)
+            print("Successfully loaded credentials from GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 env var")
+        except Exception as e:
+            print(f"Error loading token from env var: {e}")
+
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
@@ -31,31 +48,51 @@ def _get_credentials():
             except Exception as e_refresh:
                 print(f"Error refreshing token: {e_refresh}. Need to re-authorize.")
                 creds = None # Force re-authorization
-        if not creds: # creds might be None if refresh failed or no token.pickle
-            if not os.path.exists(config.OAUTH_CREDENTIALS_FILE):
-                print(f"Error: OAuth credentials.json not found at {config.OAUTH_CREDENTIALS_FILE}")
-                print("Please download it from Google Cloud Console and place it in the project root.")
-                return None
-            try:
-                print("Initiating OAuth flow for Google Docs... Please follow browser instructions.")
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    config.OAUTH_CREDENTIALS_FILE, config.GOOGLE_DOCS_SCOPES)
-                creds = flow.run_local_server(port=0)
-            except Exception as e_flow:
-                print(f"Error during OAuth flow: {e_flow}")
+        
+        if not creds: # creds might be None if refresh failed or no token
+            # Try loading client config from env var first (Cloud-native way)
+            if 'GOOGLE_OAUTH_CREDENTIALS_JSON' in os.environ:
+                try:
+                    print("Initiating OAuth flow using GOOGLE_OAUTH_CREDENTIALS_JSON env var...")
+                    client_config = json.loads(os.environ['GOOGLE_OAUTH_CREDENTIALS_JSON'])
+                    flow = InstalledAppFlow.from_client_config(
+                        client_config, config.GOOGLE_DOCS_SCOPES)
+                    # NOTE: run_local_server requires a browser, which won't work in headless cloud envs
+                    # This path is mainly for local dev if they set the env var instead of file
+                    creds = flow.run_local_server(port=0)
+                except Exception as e:
+                    print(f"Error initializing flow from env var: {e}")
+
+            # Fallback to file-based flow
+            if not creds and os.path.exists(config.OAUTH_CREDENTIALS_FILE):
+                try:
+                    print("Initiating OAuth flow from credentials.json...")
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        config.OAUTH_CREDENTIALS_FILE, config.GOOGLE_DOCS_SCOPES)
+                    creds = flow.run_local_server(port=0)
+                except Exception as e_flow:
+                    print(f"Error during OAuth flow: {e_flow}")
+                    return None
+            elif not creds:
+                print(f"Error: No credentials found. Checked:\n"
+                      f"1. token.pickle ({os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE)})\n"
+                      f"2. GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 env var ({'GOOGLE_OAUTH_TOKEN_PICKLE_BASE64' in os.environ})\n"
+                      f"3. credentials.json ({os.path.exists(config.OAUTH_CREDENTIALS_FILE)})\n"
+                      f"4. GOOGLE_OAUTH_CREDENTIALS_JSON env var ({'GOOGLE_OAUTH_CREDENTIALS_JSON' in os.environ})")
                 return None
         
-        # Save the credentials for the next run
+        # Save the credentials for the next run (best effort)
         if creds:
             try:
+                # Save to file if possible
                 with open(config.OAUTH_TOKEN_PICKLE_FILE, 'wb') as token:
                     pickle.dump(creds, token)
                 print(f"OAuth token saved to {config.OAUTH_TOKEN_PICKLE_FILE}")
             except Exception as e_save_token:
-                print(f"Error saving OAuth token: {e_save_token}")
+                print(f"Warning: Could not save token.pickle to disk: {e_save_token}")
         else:
             print("Failed to obtain OAuth credentials.")
-            return None # Explicitly return None if creds are still None
+            return None 
             
     return creds
 

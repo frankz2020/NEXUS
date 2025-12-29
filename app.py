@@ -56,26 +56,42 @@ def restore_credentials_from_env():
         # Import config to get paths
         from news_bot.core import config
         
+        logger.info("Attempting to restore credentials from environment variables...")
+        logger.info(f"Checking for GOOGLE_OAUTH_CREDENTIALS_JSON in env: {'GOOGLE_OAUTH_CREDENTIALS_JSON' in os.environ}")
+        logger.info(f"Checking for GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 in env: {'GOOGLE_OAUTH_TOKEN_PICKLE_BASE64' in os.environ}")
+        
         # 1. Restore credentials.json
         if not os.path.exists(config.OAUTH_CREDENTIALS_FILE):
             creds_json = os.environ.get('GOOGLE_OAUTH_CREDENTIALS_JSON')
             if creds_json:
-                logger.info(f"Restoring credentials.json from env var to {config.OAUTH_CREDENTIALS_FILE}")
-                with open(config.OAUTH_CREDENTIALS_FILE, 'w') as f:
-                    f.write(creds_json)
+                logger.info(f"Restoring credentials.json from env var to {config.OAUTH_CREDENTIALS_FILE} (length: {len(creds_json)})")
+                try:
+                    with open(config.OAUTH_CREDENTIALS_FILE, 'w') as f:
+                        f.write(creds_json)
+                    logger.info("Successfully wrote credentials.json")
+                except Exception as e:
+                    logger.error(f"Failed to write credentials.json: {e}")
             else:
                 logger.warning("GOOGLE_OAUTH_CREDENTIALS_JSON env var not set (credentials.json missing)")
+        else:
+             logger.info(f"credentials.json already exists at {config.OAUTH_CREDENTIALS_FILE}")
         
         # 2. Restore token.pickle
         if not os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE):
             token_base64 = os.environ.get('GOOGLE_OAUTH_TOKEN_PICKLE_BASE64')
             if token_base64:
                 import base64
-                logger.info(f"Restoring token.pickle from env var to {config.OAUTH_TOKEN_PICKLE_FILE}")
-                with open(config.OAUTH_TOKEN_PICKLE_FILE, 'wb') as f:
-                    f.write(base64.b64decode(token_base64))
+                logger.info(f"Restoring token.pickle from env var to {config.OAUTH_TOKEN_PICKLE_FILE} (length: {len(token_base64)})")
+                try:
+                    with open(config.OAUTH_TOKEN_PICKLE_FILE, 'wb') as f:
+                        f.write(base64.b64decode(token_base64))
+                    logger.info("Successfully wrote token.pickle")
+                except Exception as e:
+                    logger.error(f"Failed to write token.pickle: {e}")
             else:
                 logger.warning("GOOGLE_OAUTH_TOKEN_PICKLE_BASE64 env var not set (token.pickle missing)")
+        else:
+            logger.info(f"token.pickle already exists at {config.OAUTH_TOKEN_PICKLE_FILE}")
                 
     except Exception as e:
         logger.error(f"Error restoring credentials: {e}")
@@ -236,51 +252,27 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
         doc_link = None
         doc_error = None
         
-        # Check if credential files exist
+        # Check if credential files exist OR env vars are present (Cloud-native approach)
         from news_bot.core import config
         
-        # Try to restore credentials if missing (last resort)
+        # We no longer strictly enforce file existence here, as google_docs_exporter now supports env vars
+        # But we'll still log debug info
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Try to restore credentials if missing (best effort for local compatibility)
         if not os.path.exists(config.OAUTH_CREDENTIALS_FILE) or not os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE):
-             print("[CREDS DEBUG] Credentials missing in worker, attempting restore...", flush=True)
              try:
                  restore_credentials_from_env()
-             except Exception as e:
-                 print(f"[CREDS DEBUG] Restore failed: {e}", flush=True)
+             except Exception:
+                 pass # Ignore errors here, rely on exporter logic
         
-        # Debug: List what's in the app directory (use print with flush for immediate output)
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        cwd = os.getcwd()
-        print(f"[CREDS DEBUG] Current working directory: {cwd}", flush=True)
-        print(f"[CREDS DEBUG] App file directory: {app_dir}", flush=True)
-        print(f"[CREDS DEBUG] PROJECT_ROOT from config: {config.PROJECT_ROOT}", flush=True)
-        print(f"[CREDS DEBUG] Looking for credentials at: {config.OAUTH_CREDENTIALS_FILE}", flush=True)
-        print(f"[CREDS DEBUG] Looking for token at: {config.OAUTH_TOKEN_PICKLE_FILE}", flush=True)
+        # Simplified Check: Just assume it will work if we have env vars or files
+        has_creds = os.path.exists(config.OAUTH_CREDENTIALS_FILE) or 'GOOGLE_OAUTH_CREDENTIALS_JSON' in os.environ
+        has_token = os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE) or 'GOOGLE_OAUTH_TOKEN_PICKLE_BASE64' in os.environ
         
-        # List files in cwd
-        try:
-            files_in_cwd = os.listdir(cwd)
-            cred_files = [f for f in files_in_cwd if 'credential' in f.lower() or 'token' in f.lower() or 'pickle' in f.lower()]
-            print(f"[CREDS DEBUG] Credential-related files in cwd: {cred_files}", flush=True)
-        except Exception as e:
-            print(f"[CREDS DEBUG] Could not list cwd: {e}", flush=True)
-        
-        # List files in PROJECT_ROOT
-        try:
-            files_in_root = os.listdir(config.PROJECT_ROOT)
-            cred_files_root = [f for f in files_in_root if 'credential' in f.lower() or 'token' in f.lower() or 'pickle' in f.lower()]
-            print(f"[CREDS DEBUG] Credential-related files in PROJECT_ROOT: {cred_files_root}", flush=True)
-        except Exception as e:
-            print(f"[CREDS DEBUG] Could not list PROJECT_ROOT: {e}", flush=True)
-        
-        creds_exists = os.path.exists(config.OAUTH_CREDENTIALS_FILE)
-        token_exists = os.path.exists(config.OAUTH_TOKEN_PICKLE_FILE)
-        print(f"[CREDS DEBUG] Credentials file exists: {creds_exists}", flush=True)
-        print(f"[CREDS DEBUG] Token pickle exists: {token_exists}", flush=True)
-        
-        if not creds_exists:
-            doc_error = f"credentials.json not found at {config.OAUTH_CREDENTIALS_FILE}"
-        elif not token_exists:
-            doc_error = f"token.pickle not found at {config.OAUTH_TOKEN_PICKLE_FILE}"
+        if not has_creds and not has_token:
+             # Only error if we have ABSOLUTELY NOTHING
+             doc_error = "Missing Google Credentials (neither files nor env vars found)"
         
         if not doc_error:
             try:
