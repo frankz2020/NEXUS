@@ -13,6 +13,16 @@ load_dotenv(DOTENV_PATH)
 # OpenRouter API Configuration
 # Get your API key from https://openrouter.ai/keys
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# Clean up API key if it was pasted with quotes
+if OPENROUTER_API_KEY:
+    OPENROUTER_API_KEY = OPENROUTER_API_KEY.strip().strip('"').strip("'")
+
+if not OPENROUTER_API_KEY:
+    print("WARNING: OPENROUTER_API_KEY is not set in environment variables!")
+else:
+    print(f"DEBUG: OPENROUTER_API_KEY loaded (length: {len(OPENROUTER_API_KEY)})")
+
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Legacy Gemini API Key (deprecated, kept for backward compatibility)

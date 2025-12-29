@@ -48,6 +48,13 @@ def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -
         "X-Title": "NEXUS News Bot"
     }
     
+    # Log configuration for debugging (masked)
+    key_exists = bool(config.OPENROUTER_API_KEY)
+    key_len = len(config.OPENROUTER_API_KEY) if key_exists else 0
+    key_preview = f"{config.OPENROUTER_API_KEY[:5]}...{config.OPENROUTER_API_KEY[-4:]}" if key_exists and key_len > 10 else "N/A"
+    
+    logger.debug(f"[OPENROUTER] Config Check - Key exists: {key_exists}, Length: {key_len}, Preview: {key_preview}")
+    
     payload = {
         "model": model,
         "messages": [
