@@ -33,7 +33,9 @@ from typing import Dict, Any, Optional
 import tempfile
 import zipfile
 
-from flask import Flask, render_template, request, jsonify, Response, send_file
+from flask import Flask, render_template, request, jsonify, Response, send_file, redirect, url_for
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Configure logging
 logging.basicConfig(
@@ -115,6 +117,153 @@ except Exception as e:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'nexus-studio-secret')
+
+# ============================================================================
+# AUTHENTICATION SYSTEM
+# ============================================================================
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access the NEXUS Studio.'
+login_manager.login_message_category = 'info'
+
+# User activity log - stores {user_id: [{action, timestamp, details}]}
+user_activity_log: Dict[str, list] = {}
+activity_log_lock = threading.Lock()
+
+def log_user_activity(user_id: str, action: str, details: dict = None):
+    """Log user activity for tracking."""
+    with activity_log_lock:
+        if user_id not in user_activity_log:
+            user_activity_log[user_id] = []
+        
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "action": action,
+            "details": details or {},
+            "ip": request.remote_addr if request else None
+        }
+        user_activity_log[user_id].append(entry)
+        
+        # Keep only last 1000 entries per user
+        if len(user_activity_log[user_id]) > 1000:
+            user_activity_log[user_id] = user_activity_log[user_id][-1000:]
+        
+        # Also log to console for Railway logs
+        logger.info(f"[USER ACTIVITY] {user_id}: {action} - {details}")
+
+class User(UserMixin):
+    """User model for Flask-Login."""
+    def __init__(self, id, username, password_hash, display_name=None, role='user'):
+        self.id = id
+        self.username = username
+        self.password_hash = password_hash
+        self.display_name = display_name or username
+        self.role = role
+    
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "display_name": self.display_name,
+            "role": self.role
+        }
+
+def load_users_from_env():
+    """
+    Load users from environment variables.
+    Format: NEXUS_USERS='username1:password1:DisplayName1:role1,username2:password2:DisplayName2:role2'
+    Or use individual variables:
+    NEXUS_USER_1='username:password:DisplayName:role'
+    NEXUS_USER_2='username:password:DisplayName:role'
+    
+    Fallback to NEXUS_ADMIN_USER and NEXUS_ADMIN_PASS for simple setup.
+    """
+    users = {}
+    
+    # Method 1: Bulk user definition
+    users_str = os.environ.get('NEXUS_USERS', '')
+    if users_str:
+        for i, user_def in enumerate(users_str.split(',')):
+            parts = user_def.strip().split(':')
+            if len(parts) >= 2:
+                username = parts[0].strip()
+                password = parts[1].strip()
+                display_name = parts[2].strip() if len(parts) > 2 else username
+                role = parts[3].strip() if len(parts) > 3 else 'user'
+                
+                users[username] = User(
+                    id=str(i + 1),
+                    username=username,
+                    password_hash=generate_password_hash(password),
+                    display_name=display_name,
+                    role=role
+                )
+    
+    # Method 2: Individual user variables
+    for i in range(1, 20):  # Support up to 20 individual users
+        user_str = os.environ.get(f'NEXUS_USER_{i}', '')
+        if user_str:
+            parts = user_str.split(':')
+            if len(parts) >= 2:
+                username = parts[0].strip()
+                password = parts[1].strip()
+                display_name = parts[2].strip() if len(parts) > 2 else username
+                role = parts[3].strip() if len(parts) > 3 else 'user'
+                
+                users[username] = User(
+                    id=str(100 + i),
+                    username=username,
+                    password_hash=generate_password_hash(password),
+                    display_name=display_name,
+                    role=role
+                )
+    
+    # Method 3: Simple admin setup (fallback)
+    admin_user = os.environ.get('NEXUS_ADMIN_USER', '')
+    admin_pass = os.environ.get('NEXUS_ADMIN_PASS', '')
+    if admin_user and admin_pass and admin_user not in users:
+        users[admin_user] = User(
+            id='admin',
+            username=admin_user,
+            password_hash=generate_password_hash(admin_pass),
+            display_name='Administrator',
+            role='admin'
+        )
+    
+    # Development fallback - only if no users configured
+    if not users:
+        dev_password = os.environ.get('NEXUS_DEV_PASS', 'nexus2024')
+        users['admin'] = User(
+            id='dev-admin',
+            username='admin',
+            password_hash=generate_password_hash(dev_password),
+            display_name='Dev Admin',
+            role='admin'
+        )
+        logger.warning("⚠️  No users configured! Using default dev credentials. Set NEXUS_ADMIN_USER and NEXUS_ADMIN_PASS in Railway.")
+    
+    return users
+
+# Load users on startup
+USERS = load_users_from_env()
+logger.info(f"Loaded {len(USERS)} user(s): {list(USERS.keys())}")
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user by ID for Flask-Login."""
+    for user in USERS.values():
+        if user.id == user_id:
+            return user
+    return None
+
+def get_user_by_username(username):
+    """Get user by username."""
+    return USERS.get(username)
 
 # ============================================================================
 # TASK QUEUE SYSTEM
@@ -467,29 +616,80 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
 # ROUTES
 # ============================================================================
 
+# --- Authentication Routes ---
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page and handler."""
+    # If already logged in, redirect to home
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        
+        user = get_user_by_username(username)
+        
+        if user and user.check_password(password):
+            login_user(user, remember=True)
+            log_user_activity(user.id, 'login', {
+                'username': username,
+                'user_agent': request.headers.get('User-Agent', '')[:100]
+            })
+            
+            # Redirect to requested page or home
+            next_page = request.args.get('next')
+            if next_page and next_page.startswith('/'):
+                return redirect(next_page)
+            return redirect(url_for('index'))
+        else:
+            error = 'Invalid username or password'
+            logger.warning(f"Failed login attempt for user: {username} from IP: {request.remote_addr}")
+    
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Logout the current user."""
+    if current_user.is_authenticated:
+        log_user_activity(current_user.id, 'logout', {'username': current_user.username})
+    logout_user()
+    return redirect(url_for('login'))
+
+# --- Protected Routes ---
+
 @app.route('/')
+@login_required
 def index():
     """Render the main page."""
-    return render_template('index.html', schools=SCHOOLS)
+    log_user_activity(current_user.id, 'page_view', {'page': 'index'})
+    return render_template('index.html', schools=SCHOOLS, user=current_user)
 
 @app.route('/guide')
+@login_required
 def guide():
     """Render the interactive operation guide."""
-    return render_template('guide.html')
+    log_user_activity(current_user.id, 'page_view', {'page': 'guide'})
+    return render_template('guide.html', user=current_user)
 
 @app.route('/health')
 def health():
-    """Health check endpoint."""
+    """Health check endpoint (public for Railway monitoring)."""
     return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
 
 # --- Task Management ---
 
 @app.route('/api/tasks', methods=['GET'])
+@login_required
 def api_list_tasks():
     """List all tasks."""
     return jsonify({"tasks": list_tasks()})
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
+@login_required
 def api_get_task(task_id):
     """Get task status."""
     task = get_task(task_id)
@@ -498,8 +698,10 @@ def api_get_task(task_id):
     return jsonify(task)
 
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])
+@login_required
 def api_delete_task(task_id):
     """Delete/cancel a task."""
+    log_user_activity(current_user.id, 'task_delete', {'task_id': task_id})
     with task_lock:
         if task_id in tasks:
             del tasks[task_id]
@@ -508,6 +710,7 @@ def api_delete_task(task_id):
     return jsonify({"success": True})
 
 @app.route('/api/tasks/<task_id>/stream')
+@login_required
 def api_task_stream(task_id):
     """SSE stream for task updates."""
     def generate():
@@ -545,6 +748,7 @@ def api_task_stream(task_id):
 # --- URL to Chinese News ---
 
 @app.route('/api/url-to-doc', methods=['POST'])
+@login_required
 def api_url_to_doc():
     """Start URL to Chinese news task."""
     data = request.json
@@ -554,7 +758,8 @@ def api_url_to_doc():
     if not url:
         return jsonify({"error": "URL is required"}), 400
     
-    task_id = create_task("url_to_doc", {"url": url, "title": title})
+    task_id = create_task("url_to_doc", {"url": url, "title": title, "user": current_user.username})
+    log_user_activity(current_user.id, 'task_create', {'type': 'url_to_doc', 'task_id': task_id, 'url': url})
     
     thread = threading.Thread(target=worker_url_to_doc, args=(task_id, url, title))
     thread.daemon = True
@@ -565,6 +770,7 @@ def api_url_to_doc():
 # --- Text to Image ---
 
 @app.route('/api/text-to-image', methods=['POST'])
+@login_required
 def api_text_to_image():
     """Generate image from text."""
     data = request.json
@@ -581,8 +787,9 @@ def api_text_to_image():
         return jsonify({"error": f"Invalid school. Choose from: {list(SCHOOLS.keys())}"}), 400
     
     task_id = create_task("text_to_image", {
-        "school": school, "title": title, "content": content[:100] + "..."
+        "school": school, "title": title, "content": content[:100] + "...", "user": current_user.username
     })
+    log_user_activity(current_user.id, 'task_create', {'type': 'text_to_image', 'task_id': task_id, 'school': school})
     
     thread = threading.Thread(
         target=worker_text_to_image, 
@@ -596,6 +803,7 @@ def api_text_to_image():
 # --- Sources Image ---
 
 @app.route('/api/sources-image', methods=['POST'])
+@login_required
 def api_sources_image():
     """Generate sources reference image."""
     data = request.json
@@ -613,7 +821,8 @@ def api_sources_image():
     if school not in SCHOOLS:
         return jsonify({"error": f"Invalid school. Choose from: {list(SCHOOLS.keys())}"}), 400
     
-    task_id = create_task("sources_image", {"school": school, "url_count": len(urls)})
+    task_id = create_task("sources_image", {"school": school, "url_count": len(urls), "user": current_user.username})
+    log_user_activity(current_user.id, 'task_create', {'type': 'sources_image', 'task_id': task_id, 'school': school, 'url_count': len(urls)})
     
     thread = threading.Thread(target=worker_sources_image, args=(task_id, school, urls))
     thread.daemon = True
@@ -624,6 +833,7 @@ def api_sources_image():
 # --- Google Doc to Images ---
 
 @app.route('/api/gdoc-to-images', methods=['POST'])
+@login_required
 def api_gdoc_to_images():
     """Generate WeChat images from Google Doc."""
     data = request.json
@@ -644,7 +854,8 @@ def api_gdoc_to_images():
     if school and school not in SCHOOLS:
         return jsonify({"error": f"Invalid school. Choose from: {list(SCHOOLS.keys())}"}), 400
     
-    task_id = create_task("gdoc_to_images", {"doc_id": doc_id[:20] + "...", "school": school})
+    task_id = create_task("gdoc_to_images", {"doc_id": doc_id[:20] + "...", "school": school, "user": current_user.username})
+    log_user_activity(current_user.id, 'task_create', {'type': 'gdoc_to_images', 'task_id': task_id, 'school': school})
     
     thread = threading.Thread(target=worker_gdoc_to_images, args=(task_id, doc_id, school))
     thread.daemon = True
@@ -655,6 +866,7 @@ def api_gdoc_to_images():
 # --- File Downloads ---
 
 @app.route('/api/download/<path:filepath>')
+@login_required
 def api_download_file(filepath):
     """Download a generated file."""
     from urllib.parse import unquote
@@ -664,9 +876,11 @@ def api_download_file(filepath):
     safe_path = Path('wechat_images') / decoded_path.replace('..', '')
     if not safe_path.exists():
         return jsonify({"error": f"File not found: {safe_path}"}), 404
+    log_user_activity(current_user.id, 'file_download', {'file': str(safe_path)})
     return send_file(safe_path, as_attachment=True)
 
 @app.route('/api/preview/<path:filepath>')
+@login_required
 def api_preview_file(filepath):
     """Preview a generated image (inline display, not download)."""
     from urllib.parse import unquote
@@ -680,11 +894,14 @@ def api_preview_file(filepath):
     return send_file(safe_path, mimetype='image/png')
 
 @app.route('/api/download-folder/<path:folderpath>')
+@login_required
 def api_download_folder(folderpath):
     """Download folder as ZIP."""
     safe_path = Path('wechat_images') / folderpath.replace('..', '')
     if not safe_path.exists() or not safe_path.is_dir():
         return jsonify({"error": "Folder not found"}), 404
+    
+    log_user_activity(current_user.id, 'folder_download', {'folder': str(safe_path)})
     
     # Create ZIP
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -696,6 +913,7 @@ def api_download_folder(folderpath):
                     download_name=f'{safe_path.name}.zip')
 
 @app.route('/api/download-files', methods=['POST'])
+@login_required
 def api_download_files():
     """Download specific files as ZIP (for current session images only)."""
     data = request.json
@@ -704,6 +922,8 @@ def api_download_files():
     
     if not files:
         return jsonify({"error": "No files specified"}), 400
+    
+    log_user_activity(current_user.id, 'batch_download', {'file_count': len(files), 'name': name})
     
     # Create ZIP with only the specified files
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -726,9 +946,53 @@ def api_download_files():
 # --- Schools Info ---
 
 @app.route('/api/schools', methods=['GET'])
+@login_required
 def api_schools():
     """Get available schools."""
     return jsonify({"schools": SCHOOLS})
+
+# --- User Info & Activity Logs (Admin only) ---
+
+@app.route('/api/me', methods=['GET'])
+@login_required
+def api_current_user():
+    """Get current user info."""
+    return jsonify({"user": current_user.to_dict()})
+
+@app.route('/api/activity-logs', methods=['GET'])
+@login_required
+def api_activity_logs():
+    """Get activity logs (admin only, or own logs for regular users)."""
+    user_id = request.args.get('user_id')
+    
+    # Non-admins can only see their own logs
+    if current_user.role != 'admin':
+        user_id = current_user.id
+    
+    with activity_log_lock:
+        if user_id:
+            logs = user_activity_log.get(user_id, [])[-100:]  # Last 100 entries
+        else:
+            # Admin can see all logs
+            all_logs = []
+            for uid, entries in user_activity_log.items():
+                for entry in entries[-50:]:  # Last 50 per user
+                    entry_copy = entry.copy()
+                    entry_copy['user_id'] = uid
+                    all_logs.append(entry_copy)
+            logs = sorted(all_logs, key=lambda x: x['timestamp'], reverse=True)[:200]
+    
+    return jsonify({"logs": logs})
+
+@app.route('/api/users', methods=['GET'])
+@login_required
+def api_list_users():
+    """List all users (admin only)."""
+    if current_user.role != 'admin':
+        return jsonify({"error": "Admin access required"}), 403
+    
+    users_list = [u.to_dict() for u in USERS.values()]
+    return jsonify({"users": users_list})
 
 # ============================================================================
 # MAIN
