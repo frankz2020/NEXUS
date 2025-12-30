@@ -218,7 +218,7 @@ def generate_news_image(
     page_width: int = 540,
     device_scale: int = 4,
     title_size: float = 22.5,
-    body_size: float = 20.0,
+    body_size: float = 22.5,  # Main text 22.5px, ~19 chars per line
     cover_image: str = "",
     source_url: str = "",
     left_bar_color: str = None,
@@ -349,8 +349,8 @@ def main():
                         help="缩放比例（默认: 4）")
     parser.add_argument("--title-size", type=float, default=22.5, 
                         help="标题字号（默认: 22.5）")
-    parser.add_argument("--body-size", type=float, default=20.0, 
-                        help="正文字号（默认: 20.0）")
+    parser.add_argument("--body-size", type=float, default=22.5, 
+                        help="正文字号（默认: 22.5，约19字一行）")
     
     args = parser.parse_args()
     

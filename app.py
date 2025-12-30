@@ -433,12 +433,27 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         output_path = Path(out_dir) / school_dir if school_dir else Path(out_dir)
         generated_files = [str(f) for f in output_path.glob("*.png")] if output_path.exists() else []
         
+        # Collect source URLs from all parsed items
+        source_urls = []
+        seen_urls = set()
+        for item in items:
+            # Get all source URLs from each item
+            item_urls = item.get('source_urls') or []
+            if not item_urls and item.get('source_url'):
+                item_urls = [item.get('source_url')]
+            for url in item_urls:
+                url = (url or '').strip()
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    source_urls.append(url)
+        
         result = {
             "title": doc_title,
             "output_dir": str(output_path),
             "files": generated_files[-len(items)-1:],  # Most recent files
             "article_count": len(items),
             "school": school_name,
+            "source_urls": source_urls,  # Include source URLs for Sources Reference Image
         }
         
         update_task(task_id, status="completed", progress=100,

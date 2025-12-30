@@ -1229,14 +1229,14 @@
                     <div class="panel-body">
                         <!-- Doc Queue from completed URL->Doc tasks -->
                         <div class="doc-queue" id="docQueueSection">
-                            <div class="doc-queue-title">Select from Generated Docs</div>
+                            <div class="doc-queue-title">Select Generated Docs (fetches latest content)</div>
                             <div class="doc-queue-list" id="docQueueList">
                                 <div class="doc-queue-empty">No documents ready. Generate from URLs first.</div>
                             </div>
                         </div>
                         
                         <div class="form-group" style="margin-top: 16px;">
-                            <label class="form-label">Or paste Google Doc URL directly</label>
+                            <label class="form-label">Or paste any Google Doc URL</label>
                             <input type="text" class="form-input" id="gdocInput" 
                                    placeholder="https://docs.google.com/document/d/...">
                         </div>
@@ -1251,12 +1251,6 @@
                         <button class="btn btn-primary btn-full" onclick="submitGdocToImages()">
                             Generate Images
                         </button>
-                        
-                        <!-- Image Preview Grid -->
-                        <div id="imagePreviewSection" style="display: none; margin-top: 20px;">
-                            <div class="result-title">Generated Images (click to download)</div>
-                            <div class="image-preview-grid" id="imagePreviewGrid"></div>
-                        </div>
                     </div>
                 </div>
 
@@ -1478,13 +1472,20 @@
             const schoolUpper = school.toUpperCase();
             
             Object.values(tasks).forEach(task => {
-                if ((task.type === 'text_to_image' || task.type === 'sources_image') && 
-                    task.status === 'completed' && 
-                    task.result?.image_path) {
-                    const taskSchool = (task.result.school || task.params?.school || '').toUpperCase();
-                    if (taskSchool.includes(schoolUpper) || schoolUpper.includes(taskSchool.substring(0, 4))) {
-                        imagePaths.push(task.result.image_path);
-                    }
+                if (task.status !== 'completed') return;
+                
+                const taskSchool = (task.result?.school || task.params?.school || '').toUpperCase();
+                const schoolMatch = taskSchool.includes(schoolUpper) || schoolUpper.includes(taskSchool.substring(0, 4));
+                
+                if (!schoolMatch) return;
+                
+                // Handle text_to_image and sources_image (single image_path)
+                if ((task.type === 'text_to_image' || task.type === 'sources_image') && task.result?.image_path) {
+                    imagePaths.push(task.result.image_path);
+                }
+                // Handle gdoc_to_images (multiple files array)
+                else if (task.type === 'gdoc_to_images' && task.result?.files?.length) {
+                    task.result.files.forEach(file => imagePaths.push(file));
                 }
             });
             
@@ -1882,31 +1883,32 @@
             const docUrl = document.getElementById('gdocInput').value.trim();
             const school = document.getElementById('gdocSchool').value || 'NYU';
             
-            // If docs are selected from queue, use text-to-image with their stored content
+            // If docs are selected from queue, use their Google Doc links (fetch fresh content)
             if (selectedDocs.size > 0) {
                 // Create placeholder tasks immediately so they all show in sidebar
                 const pendingTasks = [];
                 for (const taskId of selectedDocs) {
                     const t = tasks[taskId];
-                    if (t?.result?.chinese_title && t?.result?.chinese_report) {
+                    // Use the Google Doc link to fetch fresh content (reflects any edits user made)
+                    if (t?.result?.doc_link) {
                         const placeholderId = 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                        // Use cached chinese_title for sidebar display
+                        const cachedTitle = t.result.chinese_title || 'Google Doc';
                         const taskConfig = {
                             placeholderId: placeholderId,
-                            endpoint: '/api/text-to-image',
-                            type: 'text_to_image',
+                            endpoint: '/api/gdoc-to-images',
+                            type: 'gdoc_to_images',
                             body: {
-                                school: school,
-                                title: t.result.chinese_title,
-                                content: t.result.chinese_report,
-                                source_url: t.result.source_url || ''
+                                doc_url: t.result.doc_link,
+                                school: school
                             },
-                            params: { title: t.result.chinese_title, school: school }
+                            params: { title: cachedTitle, school: school }
                         };
                         
-                        // Create placeholder in tasks immediately
+                        // Create placeholder in tasks immediately with cached title
                         tasks[placeholderId] = {
                             id: placeholderId,
-                            type: 'text_to_image',
+                            type: 'gdoc_to_images',
                             status: 'pending',
                             progress: 0,
                             message: 'Waiting...',
@@ -1915,6 +1917,8 @@
                         };
                         
                         pendingTasks.push(taskConfig);
+                    } else {
+                        showToast(`Doc "${t?.result?.chinese_title || taskId}" has no Google Doc link`, 'error');
                     }
                 }
                 
@@ -1953,7 +1957,7 @@
                     type: 'gdoc_to_images', 
                     status: 'pending', 
                     progress: 0,
-                    params: { doc_id: docUrl.substring(0, 30) + '...' },
+                    params: { doc_id: docUrl.substring(0, 30) + '...', school: school },
                     created_at: new Date().toISOString()
                 };
                 renderTasks();
@@ -2198,12 +2202,13 @@
         
         function updateDocQueue() {
             const container = document.getElementById('docQueueList');
+            // Only show docs that have a Google Doc link (required for fetching fresh content)
             const completedDocs = Object.values(tasks).filter(t => 
-                t.type === 'url_to_doc' && t.status === 'completed' && t.result?.chinese_title
+                t.type === 'url_to_doc' && t.status === 'completed' && t.result?.chinese_title && t.result?.doc_link
             );
             
             if (completedDocs.length === 0) {
-                container.innerHTML = '<div class="doc-queue-empty">No documents ready. Generate from URLs first.</div>';
+                container.innerHTML = '<div class="doc-queue-empty">No documents with Google Doc links ready. Generate from URLs first.</div>';
                 return;
             }
             
@@ -2225,15 +2230,19 @@
         
         // Sources Queue Management - auto-populate from completed image tasks
         function updateSourcesQueue() {
-            // Build sources queue from completed text_to_image tasks that haven't been used yet
+            // Build sources queue from completed text_to_image and gdoc_to_images tasks
             sourcesQueue = {};
             
             Object.values(tasks).forEach(task => {
-                if (task.type === 'text_to_image' && task.status === 'completed' && task.result) {
-                    // Skip if this task's source has already been used for a sources image
-                    if (usedSourceTaskIds.has(task.id)) return;
-                    
-                    const school = (task.result.school || task.params?.school || 'UNKNOWN').toUpperCase();
+                if (task.status !== 'completed' || !task.result) return;
+                
+                // Skip if this task's source has already been used for a sources image
+                if (usedSourceTaskIds.has(task.id)) return;
+                
+                const school = (task.result.school || task.params?.school || 'UNKNOWN').toUpperCase();
+                
+                // Handle text_to_image (single source URL)
+                if (task.type === 'text_to_image') {
                     const sourceUrl = task.result.source_url || task.params?.source_url;
                     
                     if (sourceUrl) {
@@ -2249,6 +2258,22 @@
                             });
                         }
                     }
+                }
+                // Handle gdoc_to_images (multiple source URLs)
+                else if (task.type === 'gdoc_to_images' && task.result.source_urls?.length) {
+                    if (!sourcesQueue[school]) {
+                        sourcesQueue[school] = [];
+                    }
+                    task.result.source_urls.forEach(url => {
+                        // Avoid duplicates by URL
+                        if (!sourcesQueue[school].some(s => s.url === url)) {
+                            sourcesQueue[school].push({
+                                url: url,
+                                title: task.result.title || 'Google Doc',
+                                taskId: task.id
+                            });
+                        }
+                    });
                 }
             });
             
@@ -2406,37 +2431,47 @@
             updateDocQueue();
         }
         
-        // Image Preview: show generated images
+        // Image Preview: show generated images in modal
         let currentPreviewTaskId = null;
+        let currentPreviewIndex = 0;
         
         function scrollToImagePreview(taskId) {
             const task = tasks[taskId];
             if (!task || !task.result?.files?.length) return;
             
             currentPreviewTaskId = taskId;
-            const section = document.getElementById('imagePreviewSection');
-            const grid = document.getElementById('imagePreviewGrid');
-            const panel = document.getElementById('gdocPanel');
+            currentPreviewIndex = 0;
+            showMultiImagePreview(task, 0);
+        }
+        
+        function showMultiImagePreview(task, index) {
+            const files = task.result.files;
+            if (!files || index < 0 || index >= files.length) return;
             
-            // Build image preview
-            grid.innerHTML = task.result.files.map((file, idx) => {
-                const filename = file.split('/').pop();
-                const downloadPath = file.replace('wechat_images/', '');
-                return `
-                    <a class="image-preview-item" href="/api/download/${downloadPath}" download="${filename}" title="${filename}">
-                        <img src="/api/preview/${downloadPath}" alt="Image ${idx + 1}" loading="lazy">
-                        <div class="download-overlay">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
-                            </svg>
-                        </div>
-                    </a>
-                `;
-            }).join('');
+            currentPreviewIndex = index;
+            const file = files[index];
+            const filename = file.split('/').pop();
+            const downloadPath = file.replace(/^wechat_images\//, '');
+            const encodedPath = downloadPath.split('/').map(p => encodeURIComponent(p)).join('/');
+            const previewUrl = `/api/preview/${encodedPath}`;
+            const downloadUrl = `/api/download/${encodedPath}`;
+            const title = `${index + 1}/${files.length}: ${filename}`;
             
-            section.style.display = 'block';
-            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const imgEl = document.getElementById('imageModalImg');
+            const downloadEl = document.getElementById('imageModalDownload');
+            
+            imgEl.style.opacity = '0.3';
+            imgEl.onload = function() { imgEl.style.opacity = '1'; };
+            imgEl.onerror = function() {
+                imgEl.style.opacity = '1';
+                showToast('Failed to load image preview', 'error');
+            };
+            
+            document.getElementById('imageModalTitle').textContent = title;
+            imgEl.src = previewUrl;
+            downloadEl.href = downloadUrl;
+            downloadEl.download = filename;
+            document.getElementById('imageModal').classList.add('visible');
         }
 
         // Enter key handlers
