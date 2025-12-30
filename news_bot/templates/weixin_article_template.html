@@ -1,13 +1,18 @@
 <!doctype html>
 <meta charset="utf-8" />
 <style>
-  /* —— 思源宋体 SC 变量字体：由 Python 注入 font_src —— */
+  /* —— 思源宋体 SC 变量字体：使用静态路径 —— */
   @font-face{
-    font-family:'SourceHanSerifSC';
-    src:url('{{ font_src }}') format('opentype');
+    font-family:'NEXUS_RENDER_FONT';
+    src:url('/static/fonts/SourceHanSerifSC-VF.otf') format('opentype');
     font-weight:100 900;
     font-style:normal;
     font-display:swap;
+  }
+
+  /* 只给生成图的容器套这个 class,避免影响 UI */
+  .render-root{
+    font-family:'NEXUS_RENDER_FONT', serif;
   }
 
   :root{
@@ -29,6 +34,15 @@
     margin:0; background:#fff; color:#222;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* 兼容旧代码：保留 SourceHanSerifSC 别名 */
+  @font-face{
+    font-family:'SourceHanSerifSC';
+    src:url('/static/fonts/SourceHanSerifSC-VF.otf') format('opentype');
+    font-weight:100 900;
+    font-style:normal;
+    font-display:swap;
   }
 
   /* 彻底屏蔽任何可能的“分隔线/描边”来源 */
@@ -114,7 +128,7 @@
   .content p:last-child{ margin-bottom:0; }
 </style>
 
-<div id="page-root">
+<div id="page-root" class="render-root">
   {% if credits %}<div class="credits">{{ credits }}</div>{% endif %}
 
   <div class="title-row">

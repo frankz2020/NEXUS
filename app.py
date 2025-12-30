@@ -113,7 +113,7 @@ try:
 except Exception as e:
     logger.warning(f"Some modules failed to pre-import (will retry in workers): {e}")
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'nexus-studio-secret')
 
 # ============================================================================

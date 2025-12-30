@@ -1,10 +1,24 @@
 <!doctype html>
 <meta charset="utf-8" />
 <style>
-  /* —— 思源宋体 SC 变量字体：由 Python 注入 font_src —— */
+  /* —— 思源宋体 SC 变量字体：使用静态路径 —— */
+  @font-face{
+    font-family:'NEXUS_RENDER_FONT';
+    src:url('/static/fonts/SourceHanSerifSC-VF.otf') format('opentype');
+    font-weight:100 900;
+    font-style:normal;
+    font-display:swap;
+  }
+
+  /* 只给生成图的容器套这个 class,避免影响 UI */
+  .render-root{
+    font-family:'NEXUS_RENDER_FONT', serif;
+  }
+
+  /* 兼容旧代码：保留 SourceHanSerifSC 别名 */
   @font-face{
     font-family:'SourceHanSerifSC';
-    src:url('{{ font_src }}') format('opentype');
+    src:url('/static/fonts/SourceHanSerifSC-VF.otf') format('opentype');
     font-weight:100 900;
     font-style:normal;
     font-display:swap;
@@ -76,7 +90,7 @@
   li{ margin-bottom:.5em; }
 </style>
 
-<div id="page-root">
+<div id="page-root" class="render-root">
   <div class="refbox">
     <h1 class="title">资料来源：</h1>
     {% if urls and urls|length > 0 %}
