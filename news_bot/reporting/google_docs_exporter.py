@@ -14,6 +14,60 @@ from ..core import config, school_config # For credentials paths and scopes
 import json
 import base64
 
+
+def _make_document_public(doc_id: str, creds) -> bool:
+    """
+    Sets the document to be viewable by anyone with the link.
+    
+    Args:
+        doc_id: The Google Document ID
+        creds: OAuth credentials
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        print(f"[SHARING] Attempting to make document {doc_id} public...")
+        
+        # Check if credentials have the required scope
+        if hasattr(creds, 'scopes') and creds.scopes:
+            print(f"[SHARING] Current token scopes: {creds.scopes}")
+            if 'https://www.googleapis.com/auth/drive.file' not in creds.scopes and \
+               'https://www.googleapis.com/auth/drive' not in creds.scopes:
+                print("[SHARING] WARNING: Token does not have drive.file or drive scope!")
+                print("[SHARING] You need to delete token.pickle and re-authorize to get the new scope.")
+        
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # Create a permission that allows anyone with the link to view
+        permission = {
+            'type': 'anyone',
+            'role': 'reader'
+        }
+        
+        result = drive_service.permissions().create(
+            fileId=doc_id,
+            body=permission,
+            fields='id'
+        ).execute()
+        
+        print(f"[SHARING] SUCCESS! Document {doc_id} is now viewable by anyone with the link. Permission ID: {result.get('id')}")
+        return True
+        
+    except HttpError as err:
+        print(f"[SHARING] ERROR: HTTP {err.resp.status} - {err._get_reason()}")
+        print(f"[SHARING] Full error details: {err.content}")
+        if err.resp.status == 403:
+            print("[SHARING] This is likely because:")
+            print("  1. The Drive API is not enabled in your Google Cloud project, OR")
+            print("  2. The token doesn't have the drive.file scope (delete token.pickle and re-authorize)")
+        return False
+    except Exception as e:
+        import traceback
+        print(f"[SHARING] Unexpected error: {e}")
+        print(f"[SHARING] Traceback: {traceback.format_exc()}")
+        return False
+
 def _get_credentials():
     """
     Gets valid user credentials from storage or initiates OAuth2 flow.
@@ -186,6 +240,9 @@ def update_or_create_news_document(school: dict[str, str], reports_data: list, w
             doc_id_to_update = doc.get('documentId')
             doc_url = f"https://docs.google.com/document/d/{doc_id_to_update}/edit"
             print(f"New Google Doc created with ID: {doc_id_to_update} (URL: {doc_url})")
+            
+            # Make the document viewable by anyone with the link
+            _make_document_public(doc_id_to_update, creds)
 
         # --- Construct content requests --- 
         requests_body = []

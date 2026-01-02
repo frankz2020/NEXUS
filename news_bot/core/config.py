@@ -49,7 +49,10 @@ PERPLEXITY_SEARCH_MODEL = os.getenv("PERPLEXITY_SEARCH_MODEL", "sonar-pro")
 OAUTH_CREDENTIALS_FILE = os.path.join(PROJECT_ROOT, os.getenv("OAUTH_CREDENTIALS_FILENAME", "credentials.json"))
 # Path to store the token.pickle file after successful authorization
 OAUTH_TOKEN_PICKLE_FILE = os.path.join(PROJECT_ROOT, os.getenv("OAUTH_TOKEN_FILENAME", "token.pickle"))
-GOOGLE_DOCS_SCOPES = ['https://www.googleapis.com/auth/documents'] # Scope for creating/editing docs
+GOOGLE_DOCS_SCOPES = [
+    'https://www.googleapis.com/auth/documents',  # Scope for creating/editing docs
+    'https://www.googleapis.com/auth/drive.file'  # Scope for managing file permissions (sharing)
+]
 TARGET_GOOGLE_DOC_ID = os.getenv("TARGET_GOOGLE_DOC_ID", None)
 
 # Gmail API Credentials
