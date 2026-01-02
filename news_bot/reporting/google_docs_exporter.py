@@ -39,10 +39,10 @@ def _make_document_public(doc_id: str, creds) -> bool:
         
         drive_service = build('drive', 'v3', credentials=creds)
         
-        # Create a permission that allows anyone with the link to view
+        # Create a permission that allows anyone with the link to edit
         permission = {
             'type': 'anyone',
-            'role': 'reader'
+            'role': 'writer'
         }
         
         result = drive_service.permissions().create(
@@ -51,7 +51,7 @@ def _make_document_public(doc_id: str, creds) -> bool:
             fields='id'
         ).execute()
         
-        print(f"[SHARING] SUCCESS! Document {doc_id} is now viewable by anyone with the link. Permission ID: {result.get('id')}")
+        print(f"[SHARING] SUCCESS! Document {doc_id} is now editable by anyone with the link. Permission ID: {result.get('id')}")
         return True
         
     except HttpError as err:
@@ -241,7 +241,7 @@ def update_or_create_news_document(school: dict[str, str], reports_data: list, w
             doc_url = f"https://docs.google.com/document/d/{doc_id_to_update}/edit"
             print(f"New Google Doc created with ID: {doc_id_to_update} (URL: {doc_url})")
             
-            # Make the document viewable by anyone with the link
+            # Make the document editable by anyone with the link
             _make_document_public(doc_id_to_update, creds)
 
         # --- Construct content requests --- 
