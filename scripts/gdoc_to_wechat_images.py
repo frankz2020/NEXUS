@@ -13,30 +13,39 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
+# Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request, AuthorizedSession
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build  # type: ignore
 
+# 使用你的渲染器
 from news_bot.processing.image_generator import (
     generate_image_from_article,
     make_reference_image_from_reports,
 )
 
+# =================== 学校 → 品牌色 & 文件夹名 ===================
 SCHOOL_BRAND_MAP = {
     "NYU": ("#57068c", "New York University (NYU)"),
     "NEW YORK UNIVERSITY": ("#57068c", "New York University (NYU)"),
+
     "USC": ("#990000", "University of Southern California"),
     "UNIVERSITY OF SOUTHERN CALIFORNIA": ("#990000", "University of Southern California"),
+
     "EMORY": ("#222c66", "Emory University"),
+
     "UCD": ("#022851", "University of California, Davis"),
     "UC DAVIS": ("#022851", "University of California, Davis"),
     "UNIVERSITY OF CALIFORNIA, DAVIS": ("#022851", "University of California, Davis"),
+
     "UBC": ("#002145", "University of British Columbia"),
     "UNIVERSITY OF BRITISH COLUMBIA": ("#002145", "University of British Columbia"),
+
     "EDINBURGH": ("#041e42", "University of Edinburgh"),
     "UNIVERSITY OF EDINBURGH": ("#041e42", "University of Edinburgh"),
 }
@@ -61,58 +70,66 @@ def folder_for_school(matched_school_name: str) -> str:
     if "EDINBURGH" in n:               return "EDIN_Weekly"
     return "Generic_Weekly"
 
-SCOPES = [
-    "https://www.googleapis.com/auth/documents.readonly",
-    "https://www.googleapis.com/auth/drive.readonly",
-]
+SCOPES = ["https://www.googleapis.com/auth/documents.readonly",
+          "https://www.googleapis.com/auth/drive.readonly"]
 
 ROOT = Path(__file__).resolve().parents[1]
 CRED_FILE = (ROOT / "credentials.json").as_posix()
 TOKEN_FILE = (ROOT / "token.pickle").as_posix()
 
-def _get_creds() -> Credentials:
+
+# -------------------------
+# Google Docs helpers
+# -------------------------
+def _build_docs_service():
     creds = None
     if os.path.exists(TOKEN_FILE):
         try:
+            # Try to load as pickle first (compatible with other scripts)
             with open(TOKEN_FILE, "rb") as token:
                 creds = pickle.load(token)
         except (pickle.UnpicklingError, UnicodeDecodeError, EOFError):
+            # If pickle fails, try JSON format
             try:
                 creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
             except (json.JSONDecodeError, UnicodeDecodeError):
+                # If both fail, token file is corrupted, will re-authenticate
                 creds = None
-
+    
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
             except Exception:
+                # Refresh failed, need to re-authenticate
                 creds = None
-
+        
         if not creds:
             flow = InstalledAppFlow.from_client_secrets_file(CRED_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
-
+        
+        # Save as pickle (compatible with other scripts)
         with open(TOKEN_FILE, "wb") as token:
             pickle.dump(creds, token)
+    
+    return build("docs", "v1", credentials=creds, cache_discovery=False)
 
-    return creds
 
 def _extract_doc_id(arg: str) -> str:
     m = re.search(r"/document/d/([a-zA-Z0-9_-]+)", arg)
     return m.group(1) if m else arg.strip()
 
+
 def fetch_doc(doc_id_or_url: str) -> Dict:
     doc_id = _extract_doc_id(doc_id_or_url)
-    creds = _get_creds()
-    session = AuthorizedSession(creds)
-
+    svc = _build_docs_service()
     fields = "body,inlineObjects,title"
-    url = f"https://docs.googleapis.com/v1/documents/{doc_id}"
-    resp = session.get(url, params={"fields": fields}, timeout=60)
-    resp.raise_for_status()
-    return resp.json()
+    return svc.documents().get(documentId=doc_id, fields=fields).execute()  # type: ignore
 
+
+# -------------------------
+# Parsing helpers
+# -------------------------
 def _get_text(paragraph: Dict) -> str:
     buf = []
     for e in paragraph.get("elements", []):
@@ -120,6 +137,7 @@ def _get_text(paragraph: Dict) -> str:
         if tr and "content" in tr:
             buf.append(tr["content"])
     return "".join(buf).strip()
+
 
 def _first_image_url(paragraph: Dict, inline_objects: Dict) -> str:
     for e in paragraph.get("elements", []):
@@ -135,6 +153,7 @@ def _first_image_url(paragraph: Dict, inline_objects: Dict) -> str:
                     return src
     return ""
 
+
 def _all_links(paragraph: Dict) -> List[str]:
     out = []
     for e in paragraph.get("elements", []):
@@ -148,10 +167,15 @@ def _all_links(paragraph: Dict) -> List[str]:
                 out.append(u)
     return out
 
+
 def _clean_paragraph_text(s: str) -> str:
     return s.replace("\r", "").strip()
 
+
 def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
+    """
+    从来源页面抓取封面图片（og:image, twitter:image 等）
+    """
     if not page_url:
         return ""
     try:
@@ -163,6 +187,7 @@ def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
         def _abs(u: str) -> str:
             return urljoin(page_url, (u or "").strip())
 
+        # 优先尝试 og:image, twitter:image 等 meta 标签
         for sel, attr in [
             ('meta[property="og:image"]', "content"),
             ('meta[name="og:image"]', "content"),
@@ -177,12 +202,14 @@ def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
                 if _looks_like_image_url(url):
                     return url
 
+        # 如果没有找到 meta 标签，尝试找页面中的大图
         for img in soup.find_all("img"):
             src = _abs(img.get("src") or "")
             if not _looks_like_image_url(src):
                 continue
             w = _to_int(img.get("width"))
             h = _to_int(img.get("height"))
+            # 只选择足够大的图片（避免 logo 等小图）
             if (w and w < 240) or (h and h < 160):
                 continue
             return src
@@ -190,18 +217,23 @@ def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
         print(f"Warning: Failed to fetch cover from {page_url}: {e}")
     return ""
 
+
 def _looks_like_image_url(url: str) -> bool:
+    """判断 URL 是否看起来像图片"""
     if not url:
         return False
     bad = (".svg", ".gif", "data:image/svg", "sprite", "logo", "icon")
     u = url.lower()
     return not any(b in u for b in bad)
 
+
 def _to_int(x) -> Optional[int]:
+    """安全转换为整数"""
     try:
         return int(str(x).strip())
     except (ValueError, AttributeError):
         return None
+
 
 def _looks_like_source_line(s: str) -> bool:
     low = s.lower().strip()
@@ -210,6 +242,7 @@ def _looks_like_source_line(s: str) -> bool:
     if low.startswith("来源 (source)"):
         return True
     return False
+
 
 def parse_news_from_doc(doc: Dict, extract_images: bool = True) -> List[Dict]:
     content = doc.get("body", {}).get("content", [])
@@ -270,15 +303,23 @@ def parse_news_from_doc(doc: Dict, extract_images: bool = True) -> List[Dict]:
         it["content"] = it["content"].strip()
     return items
 
+
+# -------------------------
+# Rendering
+# -------------------------
 def _slug(s: str) -> str:
     s = re.sub(r"[^\w\-]+", "_", s.strip())
     s = re.sub(r"_+", "_", s).strip("_")
     return s or "Doc"
 
+
 def _infer_school_dir(title: str) -> str:
+    # 你项目里通常是 NYU_Weekly / UCD_Weekly 等
+    # 这里做个稳妥兜底：取标题首个英数词 + "_Weekly"
     m = re.search(r"[A-Za-z]{2,}", title or "")
     base = m.group(0).upper() if m else "SCHOOL"
     return f"{base}_Weekly"
+
 
 def render_to_images(
     items: List[Dict],
@@ -298,18 +339,22 @@ def render_to_images(
     from news_bot.processing.image_generator import BrowserContext, _render_html
 
     out_root = Path(out_dir)
+    
+    # 逻辑修正：如果 out_dir 的末尾已经是 school_dir 了，就不再嵌套
     school_dir = folder_for_school(school_name) if school_name else _infer_school_dir(doc_title)
-
+    
     if out_root.name == school_dir:
         school_out = out_root
     else:
         school_out = out_root / school_dir
-
+        
     school_out.mkdir(parents=True, exist_ok=True)
 
     upper_name = (school_name or "").upper()
+    # 命中任意一个都算 UCD（用于交替色）
     is_ucd = ("DAVIS" in upper_name) or ("UC DAVIS" in upper_name) or ("UCD" in upper_name)
 
+    # ========== OPTIMIZATION 1: Parallel cover image fetching ==========
     def fetch_cover_for_item(idx_item):
         idx, it = idx_item
         cover_image = it.get("cover_image") or ""
@@ -319,11 +364,11 @@ def render_to_images(
                 print(f"  [{idx}] Fetching cover from: {src_url[:50]}...")
                 cover_image = fetch_cover_from_source(src_url)
         return idx, cover_image
-
+    
     cover_images = {}
-    items_needing_fetch = [(i, it) for i, it in enumerate(items, 1)
+    items_needing_fetch = [(i, it) for i, it in enumerate(items, 1) 
                            if not it.get("cover_image") and not skip_image_fetch]
-
+    
     if items_needing_fetch:
         print(f"  [*] Fetching {len(items_needing_fetch)} cover images in parallel...")
         with ThreadPoolExecutor(max_workers=5) as executor:
@@ -335,9 +380,10 @@ def render_to_images(
                         cover_images[idx] = cover
                 except Exception as e:
                     print(f"  [!] Error fetching cover: {e}")
-
+    
+    # ========== OPTIMIZATION 2: Batch rendering with browser reuse ==========
     print(f"  [*] Rendering {len(items)} images with shared browser...")
-
+    
     with BrowserContext() as browser_ctx:
         for idx, it in enumerate(items, 1):
             left_bar_color = None
@@ -346,10 +392,13 @@ def render_to_images(
 
             title = it.get("title", "").strip()
             content = it.get("content", "").strip()
+            
+            # Use pre-fetched cover or existing one
             cover_image = it.get("cover_image") or cover_images.get(idx, "")
 
             out_png = school_out / f"{idx:02d}_{_slug(title)[:40]}.png"
 
+            # Render HTML
             html = _render_html(
                 title=title,
                 content=content,
@@ -364,10 +413,12 @@ def render_to_images(
                 brand_color=brand_color or "#57068c",
                 left_bar_color=left_bar_color,
             )
-
+            
+            # Render with shared browser
             browser_ctx.render(html, out_png, page_width, device_scale)
             print(f"  [✓] {idx}/{len(items)}: {title[:30]}...")
 
+    # 生成"资料来源"汇总页（基于所有文章的全部链接扁平化）
     if top_n and top_n > 0:
         flat_urls: List[str] = []
         seen = set()
@@ -387,6 +438,7 @@ def render_to_images(
 
         if flat_urls:
             import tempfile
+            # 使用系统临时目录，确保不会在输出文件夹留下痕迹
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tf:
                 json.dump([{"source_url": u} for u in flat_urls], tf, ensure_ascii=False, indent=2)
                 tmp_path = tf.name
@@ -402,11 +454,16 @@ def render_to_images(
                     brand_color=brand_color or "#57068c",
                 )
             finally:
+                # 显式删除临时文件
                 try:
                     os.remove(tmp_path)
                 except Exception:
                     pass
 
+
+# -------------------------
+# CLI
+# -------------------------
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Render a single weekly Google Doc into WeChat-style images."
@@ -421,6 +478,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--top-n", type=int, default=10, help="How many source links to show on reference page")
     p.add_argument("--no-images", action="store_true", help="Skip fetching/using cover images")
     return p
+
 
 def main():
     args = build_argparser().parse_args()
@@ -452,6 +510,7 @@ def main():
         school_name=school_name,
     )
     print("Done.")
+
 
 if __name__ == "__main__":
     main()
