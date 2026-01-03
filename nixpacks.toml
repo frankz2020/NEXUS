@@ -5,7 +5,8 @@
 # Add required system packages for Playwright
 # "..." means keep all default packages that Nixpacks would include
 # fontconfig: 字体配置系统，让 Chromium 能正确加载 @font-face 定义的字体
-nixPkgs = ["...", "chromium", "nss", "freetype", "harfbuzz", "libjpeg", "libpng", "fontconfig"]
+# source-han-serif: 系统级中文字体，确保即使 file:// 加载失败也能显示中文
+nixPkgs = ["...", "chromium", "nss", "freetype", "harfbuzz", "libjpeg", "libpng", "fontconfig", "source-han-serif"]
 
 # Don't override [phases.install] - let Nixpacks auto-detect Python and run pip install
 # Nixpacks will automatically run: pip install -r requirements.txt
