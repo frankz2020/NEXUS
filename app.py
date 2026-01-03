@@ -564,7 +564,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         school_dir = folder_for_school(school_name) if school_name else ""
         
         # Generate images
-        render_to_images(
+        generated_files = render_to_images(
             items,
             doc_title=doc_title,
             out_dir=out_dir,
@@ -578,9 +578,8 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
             school_name=school_name,
         )
         
-        # Find generated files
+        # Determine final output directory for response
         output_path = Path(out_dir) / school_dir if school_dir else Path(out_dir)
-        generated_files = [str(f) for f in output_path.glob("*.png")] if output_path.exists() else []
         
         # Collect source URLs from all parsed items
         source_urls = []
@@ -599,7 +598,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         result = {
             "title": doc_title,
             "output_dir": str(output_path),
-            "files": generated_files[-len(items)-1:],  # Most recent files
+            "files": generated_files,
             "article_count": len(items),
             "school": school_name,
             "source_urls": source_urls,  # Include source URLs for Sources Reference Image

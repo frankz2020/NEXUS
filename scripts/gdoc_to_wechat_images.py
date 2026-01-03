@@ -345,7 +345,7 @@ def render_to_images(
     top_n: int,
     skip_image_fetch: bool = False,
     school_name: str = "",
-) -> None:
+) -> List[str]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from news_bot.processing.image_generator import BrowserContext, _render_html
 
@@ -360,6 +360,7 @@ def render_to_images(
         school_out = out_root / school_dir
         
     school_out.mkdir(parents=True, exist_ok=True)
+    generated_paths: List[str] = []
 
     upper_name = (school_name or "").upper()
     # 命中任意一个都算 UCD（用于交替色）
@@ -428,6 +429,7 @@ def render_to_images(
             # Render with shared browser
             browser_ctx.render(html, out_png, page_width, device_scale)
             print(f"  [✓] {idx}/{len(items)}: {title[:30]}...")
+            generated_paths.append(str(out_png))
 
     # 生成"资料来源"汇总页（基于所有文章的全部链接扁平化）
     if top_n and top_n > 0:
@@ -455,7 +457,7 @@ def render_to_images(
                 tmp_path = tf.name
 
             try:
-                make_reference_image_from_reports(
+                ref_path = make_reference_image_from_reports(
                     sorted_json_path=tmp_path,
                     output_dir=str(school_out),
                     filename="00_资料来源.png",
@@ -464,12 +466,15 @@ def render_to_images(
                     device_scale=device_scale,
                     brand_color=brand_color or "#57068c",
                 )
+                generated_paths.append(ref_path)
             finally:
                 # 显式删除临时文件
                 try:
                     os.remove(tmp_path)
                 except Exception:
                     pass
+    
+    return generated_paths
 
 
 # -------------------------
