@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-"""
-image_generator.py (brand_color + left_bar_color aware)
-Uses Playwright for stable browser automation.
-"""
 from __future__ import annotations
+
 import base64
 import os
 import re
@@ -11,29 +8,27 @@ import shutil
 import json
 from pathlib import Path
 from typing import List, Optional
+
 from jinja2 import Template
 import markdown2
 from PIL import Image, ImageChops
 
-# ----------------- 路径与参数 -----------------
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TEMPLATE_DIR       = ROOT_DIR / "templates"
-TEMPLATE_ARTICLE   = TEMPLATE_DIR / "weixin_article_template.html"
+TEMPLATE_DIR = ROOT_DIR / "templates"
+TEMPLATE_ARTICLE = TEMPLATE_DIR / "weixin_article_template.html"
 TEMPLATE_REFERENCE = TEMPLATE_DIR / "weixin_reference_template.html"
-FONTS_DIR          = ROOT_DIR / "assets" / "fonts"
+FONTS_DIR = ROOT_DIR / "assets" / "fonts"
 
-DEFAULT_PAGE_WIDTH   = 540
-DEFAULT_MIN_HEIGHT   = 2200
+DEFAULT_PAGE_WIDTH = 540
+DEFAULT_MIN_HEIGHT = 2200
 DEFAULT_DEVICE_SCALE = 2
 
-# 裁切策略：仅裁底部；左右/上固定留白
 CROP_BOTTOM_KEEP = 110
-CROP_KEEP_LEFT   = 50
-CROP_KEEP_RIGHT  = 50
-CROP_KEEP_TOP    = 50
-# ---------------------------------------------
+CROP_KEEP_LEFT = 50
+CROP_KEEP_RIGHT = 50
+CROP_KEEP_TOP = 50
 
-# ================= 模板 & 工具 =================
+
 def _ensure_article_template() -> Template:
     if not TEMPLATE_ARTICLE.exists():
         raise FileNotFoundError(
@@ -41,6 +36,7 @@ def _ensure_article_template() -> Template:
             "需要: news_bot/templates/weixin_article_template.html"
         )
     return Template(TEMPLATE_ARTICLE.read_text(encoding="utf-8"))
+
 
 def _ensure_reference_template(template_path: Optional[str | Path]) -> Template:
     if template_path:
@@ -55,11 +51,13 @@ def _ensure_reference_template(template_path: Optional[str | Path]) -> Template:
         )
     return Template(TEMPLATE_REFERENCE.read_text(encoding="utf-8"))
 
+
 def _to_html(text: str) -> str:
     if not text:
         return ""
-    cleaned = re.sub(r'(?<!\n)\n(?!\n)', ' ', text.strip())
+    cleaned = re.sub(r"(?<!\n)\n(?!\n)", " ", text.strip())
     return markdown2.markdown(cleaned)
+
 
 def _embed_image_as_data_uri(image_path_or_url: str) -> str:
     if not image_path_or_url:
@@ -74,6 +72,7 @@ def _embed_image_as_data_uri(image_path_or_url: str) -> str:
     mime = "image/png" if ext == ".png" else "image/jpeg"
     return f"data:{mime};base64,{b64}"
 
+
 def _font_data_uri() -> str:
     vf = FONTS_DIR / "SourceHanSerifSC-VF.otf"
     try:
@@ -82,18 +81,18 @@ def _font_data_uri() -> str:
             return f"data:font/otf;base64,{b64}"
     except Exception:
         pass
-    return ""  # 找不到就返回空，后续兜底使用 file:// 绝对路径
+    return ""
+
 
 def _guess_chrome_path() -> str | None:
-    """Find Chrome/Chromium executable path across different environments."""
-    # Check environment variables first
     for key in ("PUPPETEER_EXECUTABLE_PATH", "PYPPETEER_EXECUTABLE_PATH", "CHROME_PATH"):
         p = os.environ.get(key)
         if p and Path(p).exists():
             return p
-    
+
     import sys
-    if sys.platform == "darwin":  # macOS
+
+    if sys.platform == "darwin":
         candidates = [
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
@@ -105,7 +104,7 @@ def _guess_chrome_path() -> str | None:
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         ]
-    else:  # linux (Railway, Docker, etc.)
+    else:
         candidates = [
             shutil.which("google-chrome"),
             shutil.which("chrome"),
@@ -115,13 +114,13 @@ def _guess_chrome_path() -> str | None:
             "/usr/bin/chromium-browser",
             "/usr/bin/chromium",
         ]
-    
+
     for c in candidates:
         if c and Path(c).exists():
             return c
     return None
 
-# ================= 渲染 HTML（正文） =================
+
 def _render_html(
     title: str,
     content: str,
@@ -135,15 +134,27 @@ def _render_html(
     body_size: float = 22.5,
     marker_label: str = "",
     brand_color: str = "#57068c",
-    left_bar_color: str | None = None,   # 交替色传入模板
+    left_bar_color: str | None = None,
 ) -> str:
     tpl = _ensure_article_template()
     body_html = _to_html(content)
     cover_src = _embed_image_as_data_uri(cover_image) if cover_image else ""
     font_src = _font_data_uri() or (FONTS_DIR / "SourceHanSerifSC-VF.otf").resolve().as_uri()
 
-    if os.environ.get("WXIMG_DEBUG"):
-        print(f"[image_generator] brand_color={brand_color} left_bar_color={left_bar_color}")
+    if os.environ.get("WXIMG_DEBUG") == "1":
+        kind = "data" if font_src.startswith("data:") else ("file" if font_src.startswith("file:") else "other")
+        print(
+            "[WXIMG_DEBUG] "
+            + json.dumps(
+                {
+                    "brand_color": brand_color,
+                    "left_bar_color": left_bar_color,
+                    "font_src_kind": kind,
+                    "font_src_prefix": font_src[:80],
+                },
+                ensure_ascii=False,
+            )
+        )
 
     return tpl.render(
         font_src=font_src,
@@ -161,13 +172,12 @@ def _render_html(
         left_bar_color=left_bar_color,
     )
 
-# ================= HTML → PNG (Using Playwright) =================
-# Global browser instance for reuse
+
 _browser_instance = None
 _playwright_instance = None
 
+
 def _get_launch_kwargs():
-    """Get browser launch kwargs."""
     chrome_path = _guess_chrome_path()
     launch_kwargs = {
         "headless": True,
@@ -184,30 +194,121 @@ def _get_launch_kwargs():
         launch_kwargs["executable_path"] = chrome_path
     return launch_kwargs
 
+
+def _wait_for_fonts(page, timeout_ms: int = 15000) -> None:
+    try:
+        page.wait_for_function(
+            "() => (document.fonts && document.fonts.status === 'loaded')",
+            timeout=timeout_ms,
+        )
+    except Exception:
+        pass
+    try:
+        page.evaluate("() => document.fonts ? document.fonts.ready : Promise.resolve()")
+    except Exception:
+        pass
+
+
+def _debug_fonts(page, tag: str):
+    import os
+    import json
+
+    # 方案A：只有显式 WXIMG_DEBUG=1 才开启
+    if os.environ.get("WXIMG_DEBUG") != "1":
+        return
+
+    try:
+        info = page.evaluate(
+            """
+            (tag) => {
+              const safe = (fn, fallback=null) => { try { return fn(); } catch(e) { return fallback; } };
+
+              const bodyFont = safe(() => getComputedStyle(document.body).fontFamily);
+              const htmlFont = safe(() => getComputedStyle(document.documentElement).fontFamily);
+
+              const fontsStatus = safe(() => (document.fonts ? document.fonts.status : null));
+              const fontsReady = safe(() => !!(document.fonts && document.fonts.ready), null);
+
+              const checkSourceHan = safe(() => (
+                document.fonts && document.fonts.check ? document.fonts.check('16px "SourceHanSerifSC"') : null
+              ));
+
+              const faceCount = safe(() => (
+                document.fonts && document.fonts.values ? Array.from(document.fonts.values()).length : null
+              ));
+
+              const h1 = document.querySelector('h1, .title, .article-title');
+              const p  = document.querySelector('p, .content, .article-content, .body');
+              const ol = document.querySelector('ol');
+              const li = document.querySelector('li');
+
+              const h1Font = h1 ? safe(() => getComputedStyle(h1).fontFamily) : null;
+              const pFont  = p  ? safe(() => getComputedStyle(p).fontFamily)  : null;
+              const olFont = ol ? safe(() => getComputedStyle(ol).fontFamily) : null;
+              const liFont = li ? safe(() => getComputedStyle(li).fontFamily) : null;
+
+              return {
+                tag,
+                readyState: document.readyState,
+                fontsStatus,
+                fontsReady,
+                checkSourceHan,
+                faceCount,
+                bodyFont,
+                htmlFont,
+                h1Font,
+                pFont,
+                olFont,
+                liFont,
+              };
+            }
+            """,
+            tag,
+        )
+        print("[WXIMG_DEBUG]", json.dumps(info, ensure_ascii=False))
+    except Exception as e:
+        print("[WXIMG_DEBUG]", json.dumps({"tag": tag, "error": str(e)}, ensure_ascii=False))
+
+
 def _html_to_png_sync(html: str, out_path: Path, page_width: int, device_scale: int) -> None:
-    """Convert HTML to PNG using Playwright (synchronous API - more stable than pyppeteer)."""
     from playwright.sync_api import sync_playwright
-    
+    import os
+
     launch_kwargs = _get_launch_kwargs()
-    
+
     with sync_playwright() as p:
         browser = p.chromium.launch(**launch_kwargs)
-        
+
         try:
             page = browser.new_page(
                 viewport={"width": page_width, "height": 1500},
                 device_scale_factor=device_scale,
             )
-            
+
             page.set_content(html)
             page.wait_for_selector("#page-root", timeout=15000)
-            page.wait_for_timeout(800)
+
+            if os.environ.get("WXIMG_DEBUG") == "1":
+                _debug_fonts(page, "after_selector_before_wait_fonts")
+
+            _wait_for_fonts(page, timeout_ms=15000)
+
+            if os.environ.get("WXIMG_DEBUG") == "1":
+                _debug_fonts(page, "after_wait_fonts")
+
+            page.wait_for_timeout(150)
+
+            if os.environ.get("WXIMG_DEBUG") == "1":
+                _debug_fonts(page, "before_screenshot")
+
             page.screenshot(path=str(out_path), full_page=True)
         finally:
             browser.close()
 
+
 def _html_to_png_with_browser(html: str, out_path: Path, page_width: int, device_scale: int, browser) -> None:
-    """Convert HTML to PNG using an existing browser instance (faster for batch processing)."""
+    import os
+
     page = browser.new_page(
         viewport={"width": page_width, "height": 1500},
         device_scale_factor=device_scale,
@@ -215,36 +316,50 @@ def _html_to_png_with_browser(html: str, out_path: Path, page_width: int, device
     try:
         page.set_content(html)
         page.wait_for_selector("#page-root", timeout=15000)
-        page.wait_for_timeout(500)  # Reduced wait time
+
+        if os.environ.get("WXIMG_DEBUG") == "1":
+            _debug_fonts(page, "batch_after_selector_before_wait_fonts")
+
+        _wait_for_fonts(page, timeout_ms=15000)
+
+        if os.environ.get("WXIMG_DEBUG") == "1":
+            _debug_fonts(page, "batch_after_wait_fonts")
+
+        page.wait_for_timeout(120)
+
+        if os.environ.get("WXIMG_DEBUG") == "1":
+            _debug_fonts(page, "batch_before_screenshot")
+
         page.screenshot(path=str(out_path), full_page=True)
     finally:
         page.close()
 
+
+
 class BrowserContext:
-    """Context manager for batch image rendering with browser reuse."""
     def __init__(self):
         self.playwright = None
         self.browser = None
-    
+
     def __enter__(self):
         from playwright.sync_api import sync_playwright
+
         self.playwright = sync_playwright().start()
         launch_kwargs = _get_launch_kwargs()
         self.browser = self.playwright.chromium.launch(**launch_kwargs)
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.browser:
             self.browser.close()
         if self.playwright:
             self.playwright.stop()
-    
+
     def render(self, html: str, out_path: Path, page_width: int, device_scale: int):
-        """Render HTML to PNG using the shared browser."""
         _html_to_png_with_browser(html, out_path, page_width, device_scale, self.browser)
         _smart_crop_bottom_keep(out_path)
 
-# ================= 智能裁剪 =================
+
 def _smart_crop_bottom_keep(
     img_path: Path,
     keep_px: int = CROP_BOTTOM_KEEP,
@@ -261,16 +376,16 @@ def _smart_crop_bottom_keep(
         if not bbox:
             return
         _, _, _, content_bottom = bbox
-        left   = max(0, keep_left)
-        top    = max(0, keep_top)
-        right  = min(w, w - keep_right)
+        left = max(0, keep_left)
+        top = max(0, keep_top)
+        right = min(w, w - keep_right)
         bottom = min(h, content_bottom + keep_px)
         if right - left >= 20 and bottom - top >= 20:
             im.crop((left, top, right, bottom)).save(img_path)
     except Exception:
         pass
 
-# ================== 对外函数：正文长图 ==================
+
 def generate_image_from_article(
     *,
     title: str,
@@ -291,9 +406,8 @@ def generate_image_from_article(
     crop_keep_right: int = CROP_KEEP_RIGHT,
     crop_keep_top: int = CROP_KEEP_TOP,
     brand_color: str = "#57068c",
-    left_bar_color: str | None = None,   # 从上游接受交替色
+    left_bar_color: str | None = None,
 ) -> str:
-    """Generate a WeChat-style article image from text content."""
     out = Path(output_path).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -311,23 +425,24 @@ def generate_image_from_article(
         brand_color=brand_color,
         left_bar_color=left_bar_color,
     )
-    
+
     _html_to_png_sync(html, out, page_width, device_scale)
     _smart_crop_bottom_keep(
         out,
-        keep_px=crop_bottom_keep, keep_left=crop_keep_left,
-        keep_right=crop_keep_right, keep_top=crop_keep_top
+        keep_px=crop_bottom_keep,
+        keep_left=crop_keep_left,
+        keep_right=crop_keep_right,
+        keep_top=crop_keep_top,
     )
     return str(out)
 
-# ----------------- 多来源提取工具 -----------------
+
 _URL_RE = re.compile(r"https?://[^\s\)\]\}，。；、]+", re.IGNORECASE)
 
+
 def _extract_urls_from_report(r: dict) -> list[str]:
-    """从一篇 report 中抓取尽可能多的来源链接，顺序去重。"""
     candidates: list[str] = []
 
-    # 结构化字段
     if isinstance(r.get("source_urls"), list):
         candidates.extend([u for u in r["source_urls"] if isinstance(u, str)])
     if isinstance(r.get("source_url"), str):
@@ -339,16 +454,19 @@ def _extract_urls_from_report(r: dict) -> list[str]:
     if isinstance(v.get("urls"), list):
         candidates.extend([u for u in v["urls"] if isinstance(u, str)])
 
-    # 从常见文本字段扫描 http(s) 链接
     for fld in [
-        "final_cn_report", "cn_report", "zh_report",
-        "en_summary", "summary", "body", "content",
+        "final_cn_report",
+        "cn_report",
+        "zh_report",
+        "en_summary",
+        "summary",
+        "body",
+        "content",
     ]:
         txt = r.get(fld) or ""
         if isinstance(txt, str) and txt:
             candidates.extend(_URL_RE.findall(txt))
 
-    # 去重（保序）
     cleaned: list[str] = []
     seen: set[str] = set()
     for u in candidates:
@@ -358,23 +476,18 @@ def _extract_urls_from_report(r: dict) -> list[str]:
             cleaned.append(u)
     return cleaned
 
-# =============== 对外函数：参考来源页（修复版） =================
+
 def make_reference_image_from_reports(
     sorted_json_path: str,
     output_dir: str = "wechat_images",
     filename: str = "00_资料来源.png",
-    top_n: int = 5,                     # top_n=每周选取前N篇；<=0 表示不限量
+    top_n: int = 5,
     page_width: int = 540,
     device_scale: int = 4,
     template_path: str | None = None,
     min_height: int = DEFAULT_MIN_HEIGHT,
     brand_color: str = "#57068c",
 ) -> str:
-    """把选中的若干篇报告里的所有来源链接汇总成一张图片。
-       - 支持一篇报告多个来源
-       - top_n<=0 时包含全部报告
-       - 去重但保持出现顺序
-    """
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / filename

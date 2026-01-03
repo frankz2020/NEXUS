@@ -1,11 +1,10 @@
 <!doctype html>
 <meta charset="utf-8" />
 <style>
-  /* —— 思源宋体 SC 变量字体：由 Python 注入 font_src —— */
   @font-face{
     font-family:'SourceHanSerifSC';
     src:url('{{ font_src }}') format('opentype');
-    font-weight:100 900;
+    font-weight:200 900;
     font-style:normal;
     font-display:swap;
   }
@@ -13,22 +12,26 @@
   :root{
     --page-width:  {{ page_width|default(540) }}px;
     --page-height: {{ min_height|default(2200) }}px;
-    --pad: 30px;                                   /* 页面内边距 */
+    --pad: 30px;
     --column-width: calc(var(--page-width) - 2 * var(--pad));
 
-    /* ★ 内容区域适度收窄（保持你的原始数值） */
     --refbox-narrow: 60px;
     --refbox-width: calc(var(--column-width) - var(--refbox-narrow));
 
-    /* ★ 品牌色变量，Python 可注入；默认 NYU 紫 */
     --brand-color: {{ brand_color|default('#57068c') }};
   }
 
   html,body{
-    margin:0; background:#fff; color:#222;
+    margin:0;
+    background:#fff;
+    color:#222;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
-    font-family:'SourceHanSerifSC',serif; /* 全局思源宋体 */
+
+    font-family:'SourceHanSerifSC', serif;
+    font-weight:400;
+    font-variation-settings:'wght' 400;
+    font-synthesis:none;
   }
 
   #page-root{
@@ -38,42 +41,62 @@
     padding: var(--pad);
     box-sizing: border-box;
     position: relative;
+
+    font-family: inherit;
+    font-weight: inherit;
+    font-variation-settings: inherit;
   }
 
-  /* 顶部横线使用品牌色 */
   .refbox{
     width: var(--refbox-width);
     margin: 0 auto;
     border-top: 3.5px solid var(--brand-color);
-    padding-top: 12px; /* 横线与标题间距 */
+    padding-top: 12px;
+
+    font-family: inherit;
+    font-weight: inherit;
+    font-variation-settings: inherit;
   }
 
-  /* 标题：保持你的参数不变 */
   h1.title{
     margin:0 0 10px 0;
-    font-family:'SourceHanSerifSC',serif;
+    font-family: inherit;
     font-weight:500;
-    font-variation-settings:'wght' 400;
+    font-variation-settings:'wght' 500;
     font-size:25px;
     line-height:1.00;
     color:#222;
   }
 
-  /* 列表正文：保持你的参数不变 */
   ol{
     width: 100%;
-    margin:0; padding-left:1.2em;
-    font-family:'SourceHanSerifSC',serif;
+    margin:0;
+    padding-left:1.2em;
+
+    font-family: inherit;
     font-weight:400;
     font-variation-settings:'wght' 400;
+
     font-size:17px;
-    line-height:1.1;                /* ★ 正文行距（原来是 1.0） */
+    line-height:1.1;
     letter-spacing:1.5px;
     color:#888888;
+
     overflow-wrap:anywhere;
     word-break:break-word;
   }
-  li{ margin-bottom:.5em; }
+
+  li{
+    margin-bottom:.5em;
+    font-family: inherit;
+    font-weight: inherit;
+    font-variation-settings: inherit;
+  }
+
+  .refbox *{
+    font-family: inherit;
+    font-variation-settings: inherit;
+  }
 </style>
 
 <div id="page-root">
