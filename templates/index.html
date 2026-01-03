@@ -1972,7 +1972,49 @@
             const docUrl = document.getElementById('gdocInput').value.trim();
             const school = document.getElementById('gdocSchool').value || 'NYU';
             
-            // If docs are selected from queue, use their Google Doc links (fetch fresh content)
+            // Priority: URL Input > Selected Docs
+            if (docUrl) {
+                // If user entered a URL, prioritize it and clear any selected docs
+                if (selectedDocs.size > 0) {
+                    selectedDocs.clear();
+                    updateDocQueue();
+                }
+                
+                try {
+                    const res = await fetch('/api/gdoc-to-images', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ doc_url: docUrl, school })
+                    });
+                    const data = await res.json();
+                    
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                        return;
+                    }
+                    
+                    tasks[data.task_id] = { 
+                        id: data.task_id, 
+                        type: 'gdoc_to_images', 
+                        status: 'pending', 
+                        progress: 0,
+                        params: { doc_id: docUrl.substring(0, 30) + '...', school: school },
+                        created_at: new Date().toISOString()
+                    };
+                    renderTasks();
+                    
+                    // Clear input
+                    document.getElementById('gdocInput').value = '';
+                    showToast('Task created', 'success');
+                    
+                } catch (e) {
+                    showToast('Network error', 'error');
+                    console.error(e);
+                }
+                return;
+            }
+            
+            // If docs are selected from queue (and no URL input)
             if (selectedDocs.size > 0) {
                 // Create placeholder tasks immediately so they all show in sidebar
                 const pendingTasks = [];
@@ -2569,6 +2611,13 @@
         });
         document.getElementById('gdocInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') submitGdocToImages();
+        });
+        // Auto-clear doc selection when typing in URL input
+        document.getElementById('gdocInput').addEventListener('input', function() {
+            if (this.value.trim() && selectedDocs.size > 0) {
+                selectedDocs.clear();
+                updateDocQueue();
+            }
         });
         document.getElementById('sourcesUrlInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') addSourceUrl();

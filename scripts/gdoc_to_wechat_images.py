@@ -247,20 +247,29 @@ def _looks_like_source_line(s: str) -> bool:
 def parse_news_from_doc(doc: Dict, extract_images: bool = True) -> List[Dict]:
     content = doc.get("body", {}).get("content", [])
     inline_objects = doc.get("inlineObjects", {}) or {}
+    
+    title_raw = doc.get("title", "Untitled")
+    print(f"[DEBUG] Parsing doc: {title_raw}")
 
     items: List[Dict] = []
     cur: Optional[Dict] = None
 
-    for blk in content:
+    for i, blk in enumerate(content):
         p = blk.get("paragraph")
         if not p:
             continue
 
         style = p.get("paragraphStyle", {}).get("namedStyleType", "")
+        text_content = _get_text(p).strip()
+        
+        # Debug heading detection
         if style == "HEADING_1":
-            title = _get_text(p).strip()
+            print(f"[DEBUG] Found HEADING_1 at index {i}: {text_content[:30]}...")
+            
+            title = text_content
             if title:
                 if cur and (cur.get("title") and cur.get("content", "").strip()):
+                    print(f"[DEBUG] Finishing article: {cur['title'][:20]}... (len={len(cur['content'])})")
                     items.append(cur)
                 cur = {
                     "title": title,
@@ -272,7 +281,9 @@ def parse_news_from_doc(doc: Dict, extract_images: bool = True) -> List[Dict]:
             continue
 
         if cur is None:
+            # print(f"[DEBUG] Skipping content before first heading at index {i}: {text_content[:20]}...")
             continue
+
 
         if extract_images and not cur.get("cover_image"):
             img = _first_image_url(p, inline_objects)
