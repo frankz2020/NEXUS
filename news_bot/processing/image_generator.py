@@ -73,14 +73,15 @@ def _embed_image_as_data_uri(image_path_or_url: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-def _font_data_uri() -> str:
+def _font_file_uri() -> str:
+    """返回字体文件的 file:// URI，用于 Chromium 直接加载本地字体文件。
+    
+    不再使用 data URI 嵌入 53MB 字体，避免生成 70MB+ 的 HTML 导致性能问题。
+    Chromium 已配置 --allow-file-access-from-files 参数，可以访问本地文件。
+    """
     vf = FONTS_DIR / "SourceHanSerifSC-VF.otf"
-    try:
-        if vf.exists():
-            b64 = base64.b64encode(vf.read_bytes()).decode("ascii")
-            return f"data:font/otf;base64,{b64}"
-    except Exception:
-        pass
+    if vf.exists():
+        return vf.resolve().as_uri()
     return ""
 
 
@@ -139,7 +140,7 @@ def _render_html(
     tpl = _ensure_article_template()
     body_html = _to_html(content)
     cover_src = _embed_image_as_data_uri(cover_image) if cover_image else ""
-    font_src = _font_data_uri() or (FONTS_DIR / "SourceHanSerifSC-VF.otf").resolve().as_uri()
+    font_src = _font_file_uri() or (FONTS_DIR / "SourceHanSerifSC-VF.otf").resolve().as_uri()
 
     if os.environ.get("WXIMG_DEBUG") == "1":
         kind = "data" if font_src.startswith("data:") else ("file" if font_src.startswith("file:") else "other")
@@ -505,7 +506,7 @@ def make_reference_image_from_reports(
                 seen.add(u)
                 urls.append(u)
 
-    font_src = _font_data_uri() or (FONTS_DIR / "SourceHanSerifSC-VF.otf").resolve().as_uri()
+    font_src = _font_file_uri() or (FONTS_DIR / "SourceHanSerifSC-VF.otf").resolve().as_uri()
     tpl = _ensure_reference_template(template_path)
     html = tpl.render(
         font_src=font_src,
