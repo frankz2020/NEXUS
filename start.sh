@@ -76,6 +76,26 @@ fi
 echo ""
 echo "Checking Playwright browsers..."
 
+# Install custom fonts (SourceHanSerifSC-VF.otf) to user font directory
+# This ensures Chromium can find the font without relying on file:// or data URI
+echo "Installing custom fonts..."
+USER_FONT_DIR="$HOME/.local/share/fonts"
+mkdir -p "$USER_FONT_DIR"
+if [ -f "news_bot/assets/fonts/SourceHanSerifSC-VF.otf" ]; then
+    cp "news_bot/assets/fonts/SourceHanSerifSC-VF.otf" "$USER_FONT_DIR/"
+    echo "✅ Copied SourceHanSerifSC-VF.otf to $USER_FONT_DIR"
+    
+    # Update font cache
+    if command -v fc-cache &> /dev/null; then
+        fc-cache -f -v
+        echo "✅ Font cache updated"
+    else
+        echo "⚠️  fc-cache not found, skipping cache update"
+    fi
+else
+    echo "⚠️  Font file news_bot/assets/fonts/SourceHanSerifSC-VF.otf not found!"
+fi
+
 # Check if Playwright browsers are installed
 if python -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium; p.stop(); print('Playwright OK')" 2>/dev/null; then
     echo "✅ Playwright browsers available"
