@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from .wechat_image_style import patch_wechat_template
 
 import base64
 import os
@@ -35,7 +36,9 @@ def _ensure_article_template() -> Template:
             f"[image_generator] 模板不存在: {TEMPLATE_ARTICLE}\n"
             "需要: news_bot/templates/weixin_article_template.html"
         )
-    return Template(TEMPLATE_ARTICLE.read_text(encoding="utf-8"))
+    raw = TEMPLATE_ARTICLE.read_text(encoding="utf-8")
+    raw = patch_wechat_template(raw, kind="article")
+    return Template(raw)
 
 
 def _ensure_reference_template(template_path: Optional[str | Path]) -> Template:
@@ -43,13 +46,17 @@ def _ensure_reference_template(template_path: Optional[str | Path]) -> Template:
         p = Path(template_path)
         if not p.exists():
             raise FileNotFoundError(f"[image_generator] 找不到参考页模板: {p}")
-        return Template(p.read_text(encoding="utf-8"))
+        raw = p.read_text(encoding="utf-8")
+        raw = patch_wechat_template(raw, kind="reference")
+        return Template(raw)
     if not TEMPLATE_REFERENCE.exists():
         raise FileNotFoundError(
             f"[image_generator] 模板不存在: {TEMPLATE_REFERENCE}\n"
             "需要: news_bot/templates/weixin_reference_template.html"
         )
-    return Template(TEMPLATE_REFERENCE.read_text(encoding="utf-8"))
+    raw = TEMPLATE_REFERENCE.read_text(encoding="utf-8")
+    raw = patch_wechat_template(raw, kind="reference")
+    return Template(raw)
 
 
 def _to_html(text: str) -> str:
