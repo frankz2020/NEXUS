@@ -554,8 +554,14 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         
         # Detect school and brand color
         auto_color, detected_school = pick_brand_from_title(doc_title)
-        school_name = school or detected_school
-        brand_color = auto_color
+        
+        # Use manually selected school if specified, otherwise use auto-detected
+        if school and school in SCHOOLS:
+            school_name = SCHOOLS[school]["name"]  # Use full name for folder_for_school
+            brand_color = SCHOOLS[school]["color"]
+        else:
+            school_name = detected_school
+            brand_color = auto_color
         
         update_task(task_id, progress=50, message=f"Generating {len(items)} images...")
         
