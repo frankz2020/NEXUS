@@ -58,6 +58,31 @@ The summary is for {audience_en}.
 - Verify all dates, names, and numbers against the article text
 - If information is unclear or missing, do not fill in gaps with assumptions
 
+### （new）Strict Content Boundaries (Mandatory)
+
+- The summary must be a neutral restatement of facts explicitly reported in the article.
+- Do NOT add interpretive, evaluative, or concluding statements that are not directly stated in the source.
+- Do NOT include phrases that imply significance, impact, value, or meaning beyond what the article explicitly reports.
+  - Examples of prohibited phrasing include (but are not limited to):
+    - “This highlights…”
+    - “This reflects…”
+    - “This demonstrates…”
+    - “This shows the importance of…”
+    - “This marks a milestone…”
+- If the article does not explicitly frame the event as significant, impactful, or symbolic, the summary must not do so either.
+
+### Audience Neutrality Requirement (Critical)
+
+- Although the topic selection may be relevant to international or Chinese students, the summary itself must remain audience-neutral.
+- Do NOT explicitly mention or refer to:
+  - international students
+  - Chinese students
+  - overseas students
+  - visa holders
+  - “for students from China” or similar audience-specific phrasing
+- Do NOT frame any event, policy, or decision in terms of its impact on a specific student group unless such wording appears verbatim in the article.
+- The summary should read as a standard university news report, not as targeted or advisory content for any specific audience.
+
 ### Content Requirements
 Focus on key information most relevant to {audience_en}, especially concerning:
 - Their studies, work, daily life, or immigration/visa policies
