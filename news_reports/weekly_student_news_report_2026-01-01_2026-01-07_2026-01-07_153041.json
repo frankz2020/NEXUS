@@ -1,0 +1,40 @@
+[
+  {
+    "news_id": 1,
+    "original_title": "Emory hospitals ring in 2026 with first New Year’s Day babiesJan. 1",
+    "source_url": "https://news.emory.edu/stories/2026/01/hs_2026_new_years_babies_01-01-2026/story.html",
+    "source_method": "archive_scan",
+    "reported_publication_date": "2026-01-01",
+    "verification_details": {
+      "url": "https://news.emory.edu/stories/2026/01/hs_2026_new_years_babies_01-01-2026/story.html",
+      "publication_date_str": "2026-01-01",
+      "is_recent": "Within range (from OpenRouter) (2026-01-01 to 2026-01-07)",
+      "is_within_range": true,
+      "is_relevant": "Relevant",
+      "article_type_assessment": "News article"
+    },
+    "english_summary": "Emory University hospitals celebrated the arrival of the first babies of 2026 across several of its major medical facilities on New Year’s Day. The first newborns of the year were recorded at four key campus and regional locations: Emory Decatur Hospital, Emory Hospital Warner Robins, Emory Johns Creek Hospital, and Emory University Hospital Midtown. Specifically, baby Naomi was born at the Decatur facility, while baby Blakely arrived at the Warner Robins location. Additionally, baby Taylor was delivered at Emory Johns Creek Hospital and baby Zaylon was born at Emory University Hospital Midtown. This annual milestone highlights the extensive reach of the Emory Healthcare system throughout the Atlanta metropolitan area and beyond. For international students at Emory, particularly those studying medicine, nursing, or public health, these births represent the localized impact of the university’s clinical operations. The event serves as a festive start to the year for the broader Emory community.",
+    "chinese_title": "埃默里大学医院, 迎来首批新年宝宝",
+    "refined_chinese_news_report": "2026年元旦当天，埃默里大学 (Emory University) 医疗系统的多家主要医疗机构共同庆祝了首批“新年宝宝”的诞生。这些新生儿分别出生在埃默里迪凯特医院 (Emory Decatur Hospital)、埃默里沃纳罗宾斯医院 (Emory Hospital Warner Robins)、埃默里约翰溪医院 (Emory Johns Creek Hospital) 以及埃默里大学中城医院 (Emory University Hospital Midtown)。\n在具体的出生记录中，女婴内奥米 (Naomi) 在迪凯特院区出生，女婴布莱克利 (Blakely) 则在沃纳罗宾斯院区降生。随后，泰勒 (Taylor) 和泽隆 (Zaylon) 分别在约翰溪医院和中城医院顺利出生。这一年度里程碑展示了埃默里医疗系统在亚特兰大都会区及周边地区的广泛覆盖。\n对于在埃默里大学就读医学、护理或公共卫生专业的留学生而言，这些临床医疗案例体现了学校医疗业务的本地影响力。目前，这几家医院的庆祝活动为整个埃默里社区开启了充满活力的2026年。",
+    "processing_timestamp": "2026-01-07T15:30:33.103359"
+  },
+  {
+    "news_id": 2,
+    "original_title": "Crespino appointed interim dean of Emory College of Arts and Sciences as Krauthamer steps downJan. 6",
+    "source_url": "https://news.emory.edu/stories/2026/01/er_emory_college_leadership_update_06-01-2026/story.html",
+    "source_method": "archive_scan",
+    "reported_publication_date": "2026-01-06",
+    "verification_details": {
+      "url": "https://news.emory.edu/stories/2026/01/er_emory_college_leadership_update_06-01-2026/story.html",
+      "publication_date_str": "2026-01-06",
+      "is_recent": "Within range (from OpenRouter) (2026-01-01 to 2026-01-07)",
+      "is_within_range": true,
+      "is_relevant": "Relevant",
+      "article_type_assessment": "News article"
+    },
+    "english_summary": "Emory University has appointed Joseph Crespino as the interim dean of Emory College of Arts and Sciences, effective January 6, following the resignation of Barbara Krauthamer for personal reasons. Crespino, a distinguished historian who has been with Emory since 2003, previously served as the senior associate dean of faculty and the divisional dean of humanities and social sciences. During Krauthamer’s tenure, the college saw significant achievements, including a six-percentage-point increase in the four-year graduation rate and the recruitment of preeminent scholars. For international students, this leadership transition maintains continuity in academic excellence, as Crespino has a proven record in curriculum development and undergraduate mentoring. Provost Badia Ahad confirmed that a national search for a permanent dean will commence this month, with the goal of making an appointment by the fall. Krauthamer will remain at Emory as a member of the college faculty. This shift ensures the ongoing advancement of strategic initiatives, including the strengthening of high-performance computing resources and student advising models.",
+    "chinese_title": "标题生成失败 (Title generation failed)",
+    "refined_chinese_news_report": "翻译失败或跳过 (Translation failed or skipped)",
+    "processing_timestamp": "2026-01-07T15:30:41.577655"
+  }
+]
