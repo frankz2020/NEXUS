@@ -557,11 +557,18 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         
         # Use manually selected school if specified, otherwise use auto-detected
         if school and school in SCHOOLS:
+            school_code = school  # Store the short code (NYU, USC, etc.)
             school_name = SCHOOLS[school]["name"]  # Use full name for folder_for_school
             brand_color = SCHOOLS[school]["color"]
         else:
+            school_code = None  # Will try to detect from detected_school
             school_name = detected_school
             brand_color = auto_color
+            # Try to find school code from detected school name
+            for code, info in SCHOOLS.items():
+                if info["name"] == detected_school:
+                    school_code = code
+                    break
         
         update_task(task_id, progress=50, message=f"Generating {len(items)} images...")
         
@@ -606,7 +613,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
             "output_dir": str(output_path),
             "files": generated_files,
             "article_count": len(items),
-            "school": school_name,
+            "school": school_code or school_name,  # Use short code if available, otherwise full name
             "source_urls": source_urls,  # Include source URLs for Sources Reference Image
         }
         
