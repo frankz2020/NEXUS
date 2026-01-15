@@ -339,16 +339,6 @@ SCHOOLS = {
     "EDINBURGH": {"name": "University of Edinburgh", "color": "#041e42", "folder": "EDIN_Weekly"},
 }
 
-# Accept full school names as aliases for validation
-SCHOOL_ALIASES = {
-    "UNIVERSITY OF SOUTHERN CALIFORNIA": "USC",
-    "NEW YORK UNIVERSITY": "NYU",
-    "EMORY UNIVERSITY": "EMORY",
-    "UC DAVIS": "UCD",
-    "UNIVERSITY OF BRITISH COLUMBIA": "UBC",
-    "UNIVERSITY OF EDINBURGH": "EDINBURGH",
-}
-
 # ============================================================================
 # BACKGROUND WORKERS
 # ============================================================================
@@ -789,8 +779,7 @@ def api_url_to_doc():
 def api_text_to_image():
     """Generate image from text."""
     data = request.json
-    school = data.get('school', 'NYU').strip().upper()
-    school = SCHOOL_ALIASES.get(school, school)
+    school = data.get('school', 'NYU').upper()
     title = data.get('title', '').strip()
     content = data.get('content', '').strip()
     source_url = data.get('source_url', '').strip() or None
@@ -823,8 +812,7 @@ def api_text_to_image():
 def api_sources_image():
     """Generate sources reference image."""
     data = request.json
-    school = data.get('school', 'NYU').strip().upper()
-    school = SCHOOL_ALIASES.get(school, school)
+    school = data.get('school', 'NYU').upper()
     urls = data.get('urls', [])
     
     if not urls or not isinstance(urls, list):
@@ -856,8 +844,6 @@ def api_gdoc_to_images():
     data = request.json
     doc_url = data.get('doc_url', '').strip()
     school = data.get('school', '').strip().upper() or None
-    if school:
-        school = SCHOOL_ALIASES.get(school, school)
     
     if not doc_url:
         return jsonify({"error": "Google Doc URL is required"}), 400
