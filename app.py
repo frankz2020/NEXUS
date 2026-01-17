@@ -557,29 +557,11 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         
         # Use manually selected school if specified, otherwise use auto-detected
         if school and school in SCHOOLS:
-            school_code = school
             school_name = SCHOOLS[school]["name"]  # Use full name for folder_for_school
             brand_color = SCHOOLS[school]["color"]
         else:
             school_name = detected_school
             brand_color = auto_color
-            # Reverse lookup: find school_code from detected school name
-            # Aliases handle variations like "University of California, Davis" vs "UC Davis"
-            SCHOOL_ALIASES = {
-                "NYU": ["nyu", "new york university"],
-                "USC": ["usc", "southern california"],
-                "EMORY": ["emory"],
-                "UCD": ["ucd", "uc davis", "davis", "california, davis"],
-                "UBC": ["ubc", "british columbia"],
-                "EDINBURGH": ["edinburgh"],
-            }
-            school_code = None
-            if detected_school:
-                detected_lower = detected_school.lower()
-                for code, aliases in SCHOOL_ALIASES.items():
-                    if any(alias in detected_lower for alias in aliases):
-                        school_code = code
-                        break
         
         update_task(task_id, progress=50, message=f"Generating {len(items)} images...")
         
@@ -625,7 +607,6 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
             "files": generated_files,
             "article_count": len(items),
             "school": school_name,
-            "school_code": school_code,  # School code for API calls (works for both manual and auto-detected)
             "source_urls": source_urls,  # Include source URLs for Sources Reference Image
         }
         
