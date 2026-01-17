@@ -1541,6 +1541,22 @@
             'EDIN': 'EDIN_Weekly'
         };
         
+        // Convert school name to school code (handles old tasks without school_code)
+        function getSchoolCode(schoolName) {
+            if (!schoolName) return null;
+            const upper = schoolName.toUpperCase();
+            // Direct match for codes
+            if (['NYU', 'USC', 'EMORY', 'UCD', 'UBC', 'EDINBURGH'].includes(upper)) return upper;
+            // Name matching
+            if (upper.includes('NEW YORK') || upper.includes('NYU')) return 'NYU';
+            if (upper.includes('SOUTHERN CALIFORNIA') || upper.includes('USC')) return 'USC';
+            if (upper.includes('EMORY')) return 'EMORY';
+            if (upper.includes('DAVIS') || upper.includes('UCD')) return 'UCD';
+            if (upper.includes('BRITISH COLUMBIA') || upper.includes('UBC')) return 'UBC';
+            if (upper.includes('EDINBURGH')) return 'EDINBURGH';
+            return null;
+        }
+        
         function getSchoolFolder(school) {
             const upperSchool = school.toUpperCase();
             // Direct match
@@ -2370,7 +2386,13 @@
                 // Skip if this task's source has already been used for a sources image
                 if (usedSourceTaskIds.has(task.id)) return;
                 
-                const school = (task.result.school || task.params?.school || 'UNKNOWN').toUpperCase();
+                // Use school_code if available, otherwise convert school name to code (backward compatible)
+                const school = (
+                    task.result.school_code || 
+                    getSchoolCode(task.result.school) || 
+                    task.params?.school || 
+                    'UNKNOWN'
+                ).toUpperCase();
                 
                 // Handle text_to_image (single source URL)
                 if (task.type === 'text_to_image') {
