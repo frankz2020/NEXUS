@@ -1,6 +1,7 @@
 # news_bot/main_orchestrator.py
 
 from datetime import datetime, date, timedelta
+from typing import Callable, Optional, Tuple, List, Dict
 
 from .core import config, school_config
 from .discovery import search_client
@@ -8,6 +9,165 @@ from .processing import article_handler
 from .generation import summarizer
 from .utils import file_manager, prompt_logger
 from .localization import translator
+
+
+def run_news_bot_for_school(
+    school_profile: dict,
+    progress_callback: Optional[Callable[[int, str], None]] = None
+) -> Tuple[Optional[str], List[Dict]]:
+    """
+    Web-callable version of news bot that accepts school as parameter.
+    
+    Args:
+        school_profile: School configuration dict from school_config.SCHOOL_PROFILES
+        progress_callback: Optional callback function(progress_pct, message) for UI updates
+    
+    Returns:
+        Tuple of (output_filepath, reports_list)
+    """
+    def update_progress(pct: int, msg: str):
+        if progress_callback:
+            progress_callback(pct, msg)
+        print(f"[{pct}%] {msg}")
+    
+    run_start_time = datetime.now()
+    update_progress(0, f"Starting news collection for {school_profile.get('school_name', 'Unknown')}")
+    
+    # Initialize prompt logging
+    prompt_log_file = prompt_logger.initialize_prompt_log()
+    
+    try:
+        config.validate_config()
+    except ValueError as e_config:
+        update_progress(0, f"Configuration Error: {e_config}")
+        return None, []
+    
+    # Get date range
+    start_date, end_date = config.get_news_date_range()
+    update_progress(5, f"Date range: {start_date} to {end_date}")
+    
+    # Step 1: Discover articles
+    update_progress(10, "Discovering articles...")
+    discovered_articles = search_client.find_relevant_articles(school_profile)
+    
+    if not discovered_articles:
+        update_progress(100, "No articles discovered")
+        return None, []
+    
+    update_progress(15, f"Found {len(discovered_articles)} potential articles")
+    
+    final_news_reports = []
+    processed_urls = set()
+    total_articles = len(discovered_articles)
+    
+    # Steps 2-4: Process each article
+    for i, article_info in enumerate(discovered_articles):
+        if len(final_news_reports) >= config.MAX_FINAL_REPORTS:
+            update_progress(85, f"Reached max reports ({config.MAX_FINAL_REPORTS})")
+            break
+        
+        # Calculate progress: 15-85% for processing articles
+        progress_pct = 15 + int((i / total_articles) * 70)
+        
+        original_title = article_info.get("title", "N/A")
+        article_url = article_info.get("url")
+        source_method = article_info.get("source_method", "Unknown")
+        article_date = article_info.get("url_date", "N/A")
+        
+        update_progress(progress_pct, f"Processing {i+1}/{total_articles}: {original_title[:50]}...")
+        
+        if not article_url or not article_url.startswith("http"):
+            continue
+        
+        if article_url in processed_urls:
+            continue
+        processed_urls.add(article_url)
+        
+        # Step 2a: Fetch and extract text
+        article_text = article_handler.fetch_and_extract_text(article_url)
+        if not article_text:
+            continue
+        
+        # Step 2b: Verify article
+        verification_results = article_handler.verify_article_with_gemini(
+            school_profile, article_text, article_url, article_date
+        )
+        if not verification_results:
+            continue
+        
+        # Check date range
+        is_within_date_range = verification_results.get("is_within_range", False)
+        if not is_within_date_range:
+            is_within_date_range = "Within range" in verification_results.get("is_recent", "") or "Recent" in verification_results.get("is_recent", "")
+        
+        # Check article suitability
+        allow_events = bool(school_profile.get("include_event_announcements"))
+        article_type = verification_results.get("article_type_assessment")
+        allow_opinion = bool(school_profile.get("include_opinion_blog"))
+        is_suitable_for_summary = (
+            is_within_date_range and
+            verification_results.get("is_relevant") == "Relevant" and
+            (
+                article_type == "News article" or
+                (allow_events and article_type == "Event/Announcement") or
+                (allow_opinion and article_type == "Opinion/Blog")
+            )
+        )
+        
+        if not is_suitable_for_summary:
+            continue
+        
+        # Step 3: Generate English summary
+        english_summary = summarizer.generate_summary_with_gemini(
+            school_profile, article_text, article_url, original_title
+        )
+        if not english_summary or "failed" in english_summary.lower() or "skipped" in english_summary.lower():
+            continue
+        
+        # Step 4: Translate to Chinese
+        english_report_data_for_translation = {
+            "summary": english_summary,
+            "source_url": article_url,
+            "reported_publication_date": verification_results.get("publication_date_str", "N/A"),
+            "original_title": original_title
+        }
+        translation_output = translator.translate_and_restyle_to_chinese(english_report_data_for_translation)
+        
+        chinese_title = "中文标题失败"
+        refined_chinese_report = "翻译失败"
+        
+        if translation_output:
+            chinese_title = translation_output.get("chinese_title", chinese_title)
+            refined_chinese_report = translation_output.get("refined_chinese_news_report", refined_chinese_report)
+        
+        final_news_reports.append({
+            "news_id": len(final_news_reports) + 1,
+            "original_title": original_title,
+            "source_url": article_url,
+            "source_method": source_method,
+            "reported_publication_date": verification_results.get("publication_date_str", "N/A"),
+            "verification_details": verification_results,
+            "english_summary": english_summary,
+            "chinese_title": chinese_title,
+            "refined_chinese_news_report": refined_chinese_report,
+            "processing_timestamp": datetime.now().isoformat()
+        })
+    
+    # Step 5: Save reports
+    update_progress(90, "Saving reports to JSON...")
+    saved_filepath = None
+    if final_news_reports:
+        output_filename_base = f"weekly_student_news_report_{start_date}_{end_date}"
+        saved_filepath = file_manager.save_data_to_json(final_news_reports, output_filename_base)
+        update_progress(95, f"Saved {len(final_news_reports)} reports")
+    else:
+        update_progress(95, "No reports generated")
+    
+    run_end_time = datetime.now()
+    update_progress(100, f"Completed in {run_end_time - run_start_time}")
+    
+    return saved_filepath, final_news_reports
+
 
 def run_news_bot():
     """

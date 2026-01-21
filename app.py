@@ -484,6 +484,7 @@ def worker_text_to_image(task_id: str, school: str, title: str, content: str,
         result = {
             "image_path": output_path,
             "school": school,
+            "school_code": school,  # Unified school code for batch download
             "title": title,
             "source_url": source_url,
         }
@@ -512,6 +513,7 @@ def worker_sources_image(task_id: str, school: str, urls: list):
         result = {
             "image_path": output_path,
             "school": school,
+            "school_code": school,  # Unified school code for batch download
             "url_count": len(urls),
         }
         
@@ -521,6 +523,114 @@ def worker_sources_image(task_id: str, school: str, urls: list):
     except Exception as e:
         logger.error(f"Error in worker_sources_image: {e}\n{traceback.format_exc()}")
         update_task(task_id, error=str(e))
+
+def worker_full_pipeline(task_id: str, school_code: str):
+    """
+    Run the full news collection pipeline:
+    1. main_orchestrator: discover + process articles -> JSON
+    2. coordinator: process reports -> individual Google Docs
+    3. Create sub-tasks for each generated doc
+    """
+    try:
+        update_task(task_id, status="running", progress=2, message="Initializing pipeline...")
+        
+        # Import modules
+        from news_bot.core import school_config
+        from news_bot.main_orchestrator import run_news_bot_for_school
+        from news_bot.processing.coordinator import process_reports_individually
+        
+        # Get school profile
+        school_profile = school_config.SCHOOL_PROFILES.get(school_code.lower())
+        if not school_profile:
+            update_task(task_id, error=f"Unknown school: {school_code}")
+            return
+        
+        school_name = school_profile.get("school_name", school_code)
+        update_task(task_id, progress=5, message=f"Starting pipeline for {school_name}...")
+        
+        # Step 1: Run main_orchestrator (5-60%)
+        def orchestrator_progress(pct, msg):
+            # Map 0-100 to 5-60
+            mapped_pct = 5 + int(pct * 0.55)
+            update_task(task_id, progress=mapped_pct, message=f"[Discovery] {msg}")
+        
+        json_path, reports = run_news_bot_for_school(school_profile, orchestrator_progress)
+        
+        if not reports:
+            update_task(task_id, status="completed", progress=100, 
+                       message="No articles found", result={
+                           "school": school_name,
+                           "article_count": 0,
+                           "docs": []
+                       })
+            return
+        
+        update_task(task_id, progress=62, message=f"Found {len(reports)} articles, creating Google Docs...")
+        
+        # Step 2: Run coordinator to create individual Google Docs (62-95%)
+        def coordinator_progress(pct, msg):
+            # Map 0-100 to 62-95
+            mapped_pct = 62 + int(pct * 0.33)
+            update_task(task_id, progress=mapped_pct, message=f"[Export] {msg}")
+        
+        doc_results = process_reports_individually(school_profile, reports, coordinator_progress)
+        
+        # Step 3: Create sub-tasks for each doc (so they appear in doc queue)
+        update_task(task_id, progress=96, message="Creating task entries...")
+        
+        created_tasks = []
+        for doc_result in doc_results:
+            if doc_result.get("doc_link"):
+                # Create a completed url_to_doc task for each doc
+                sub_task_id = str(uuid.uuid4())[:8]
+                with task_lock:
+                    tasks[sub_task_id] = {
+                        "id": sub_task_id,
+                        "type": "url_to_doc",
+                        "status": "completed",
+                        "progress": 100,
+                        "message": "Created via pipeline",
+                        "params": {
+                            "url": doc_result.get("source_url", ""),
+                            "title": doc_result.get("original_title", ""),
+                            "pipeline_task": task_id
+                        },
+                        "result": {
+                            "title": doc_result.get("chinese_title"),
+                            "chinese_title": doc_result.get("chinese_title"),
+                            "chinese_report": doc_result.get("chinese_report"),
+                            "english_summary": doc_result.get("english_summary"),
+                            "source_url": doc_result.get("source_url"),
+                            "doc_link": doc_result.get("doc_link"),
+                        },
+                        "error": None,
+                        "created_at": datetime.now().isoformat(),
+                        "updated_at": datetime.now().isoformat(),
+                    }
+                    sse_queues[sub_task_id] = Queue()
+                created_tasks.append({
+                    "task_id": sub_task_id,
+                    "title": doc_result.get("chinese_title"),
+                    "doc_link": doc_result.get("doc_link")
+                })
+        
+        # Complete the pipeline task
+        result = {
+            "school": school_name,
+            "article_count": len(reports),
+            "docs_created": len(created_tasks),
+            "json_path": json_path,
+            "created_tasks": created_tasks
+        }
+        
+        update_task(task_id, status="completed", progress=100,
+                   message=f"Pipeline completed: {len(created_tasks)} docs created",
+                   result=result)
+        
+    except Exception as e:
+        logger.error(f"Error in worker_full_pipeline: {e}\n{traceback.format_exc()}")
+        update_task(task_id, error=str(e))
+
 
 def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
     """Generate WeChat images from Google Doc."""
@@ -853,6 +963,42 @@ def api_sources_image():
     thread.start()
     
     return jsonify({"task_id": task_id, "message": "Task started"})
+
+# --- Full Pipeline (News Collection) ---
+
+@app.route('/api/full-pipeline', methods=['POST'])
+@login_required
+def api_full_pipeline():
+    """Run the full news collection pipeline for a school."""
+    data = request.json
+    school = data.get('school', '').lower()
+    
+    # Import school_config to validate
+    from news_bot.core import school_config
+    
+    if school not in school_config.SCHOOL_PROFILES:
+        valid_schools = list(school_config.SCHOOL_PROFILES.keys())
+        return jsonify({"error": f"Invalid school. Choose from: {valid_schools}"}), 400
+    
+    school_name = school_config.SCHOOL_PROFILES[school].get("school_name", school)
+    
+    task_id = create_task("full_pipeline", {
+        "school": school,
+        "school_name": school_name,
+        "user": current_user.username
+    })
+    log_user_activity(current_user.id, 'task_create', {
+        'type': 'full_pipeline',
+        'task_id': task_id,
+        'school': school
+    })
+    
+    thread = threading.Thread(target=worker_full_pipeline, args=(task_id, school))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({"task_id": task_id, "message": f"Pipeline started for {school_name}"})
+
 
 # --- Google Doc to Images ---
 

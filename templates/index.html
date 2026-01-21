@@ -30,6 +30,7 @@
             --type-doc-img: #8b5cf6;
             --type-text-img: #f59e0b;
             --type-sources: #10b981;
+            --type-pipeline: #06b6d4;
             /* School brand colors - unified across all templates */
             --school-nyu: #57068c;
             --school-usc: #990000;
@@ -336,6 +337,7 @@
         .task-badge-type.doc-img { background: var(--type-doc-img); }
         .task-badge-type.text-img { background: var(--type-text-img); }
         .task-badge-type.sources { background: var(--type-sources); }
+        .task-badge-type.pipeline { background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); }
 
         .task-badge-school {
             top: 6px;
@@ -1287,25 +1289,42 @@
             <p class="section-desc">Generate Chinese news content and WeChat-ready images.</p>
 
             <div class="panels">
+                <!-- Panel 1: Automated News Ingestion -->
                 <div class="panel">
                     <div class="panel-header">
-                        <span class="panel-title">URL to Chinese News</span>
-                        <span class="panel-badge">AI Process</span>
+                        <span class="panel-title">Automated News Ingestion</span>
+                        <span class="panel-badge">Fetch</span>
                     </div>
                     <div class="panel-body">
                         <div class="form-group">
-                            <label class="form-label">News Article URL</label>
-                            <input type="url" class="form-input" id="urlInput" 
-                                   placeholder="https://example.com/news-article">
+                            <label class="form-label">Select School</label>
+                            <select class="form-select" id="pipelineSchool">
+                                <option value="nyu">New York University (NYU)</option>
+                                <option value="usc">University of Southern California</option>
+                                <option value="emory">Emory University</option>
+                                <option value="ucd">UC Davis</option>
+                                <option value="ubc">University of British Columbia</option>
+                                <option value="edin">University of Edinburgh</option>
+                            </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Custom Title (Optional)</label>
-                            <input type="text" class="form-input" id="urlTitle" 
-                                   placeholder="Leave empty to auto-generate">
+                            <div style="padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius); border: 1px solid var(--border);">
+                                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Pipeline Steps</div>
+                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                                    1. Auto-discover news articles<br>
+                                    2. Fetch &amp; verify content<br>
+                                    3. AI generate English summary<br>
+                                    4. Translate to Chinese<br>
+                                    5. Export each article to Google Doc
+                                </div>
+                            </div>
                         </div>
-                        <button class="btn btn-primary btn-full" onclick="submitUrlToDoc()">
-                            Process URL
+                        <button class="btn btn-primary btn-full" onclick="submitFullPipeline()">
+                            Start Collection
                         </button>
+                        <div style="margin-top: 12px; font-size: 11px; color: var(--text-muted); text-align: center;">
+                            Estimated time: May take longer depending on the number of articles
+                        </div>
                     </div>
                 </div>
 
@@ -1385,7 +1404,7 @@
                     </div>
                 </div>
 
-                <!-- Panel 4: Sources Image -->
+                <!-- Panel 4: Sources Reference Image -->
                 <div class="panel">
                     <div class="panel-header">
                         <span class="panel-title">Sources Reference Image</span>
@@ -1429,6 +1448,29 @@
                             <div class="result-title">Generated Image</div>
                             <div id="sourcesResultContent"></div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Panel 5: URL to Chinese News -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="panel-title">URL to Chinese News</span>
+                        <span class="panel-badge">AI Process</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label class="form-label">News Article URL</label>
+                            <input type="url" class="form-input" id="urlInput" 
+                                   placeholder="https://example.com/news-article">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Custom Title (Optional)</label>
+                            <input type="text" class="form-input" id="urlTitle" 
+                                   placeholder="Leave empty to auto-generate">
+                        </div>
+                        <button class="btn btn-primary btn-full" onclick="submitUrlToDoc()">
+                            Process URL
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1579,7 +1621,8 @@
             Object.values(tasks).forEach(task => {
                 if (task.status !== 'completed') return;
                 
-                const taskSchool = (task.result?.school || task.params?.school || '').toUpperCase();
+                // Prioritize school_code for unified matching across all image modules
+                const taskSchool = (task.result?.school_code || task.result?.school || task.params?.school || '').toUpperCase();
                 const schoolMatch = taskSchool.includes(schoolUpper) || schoolUpper.includes(taskSchool.substring(0, 4));
                 
                 if (!schoolMatch) return;
@@ -1630,7 +1673,8 @@
             
             Object.values(tasks).forEach(task => {
                 if (task.type === 'text_to_image' || task.type === 'gdoc_to_images' || task.type === 'sources_image') {
-                    const school = task.result?.school || task.params?.school;
+                    // Prioritize school_code for unified matching
+                    const school = task.result?.school_code || task.result?.school || task.params?.school;
                     if (school) schools.add(school.toUpperCase());
                 }
             });
@@ -1690,7 +1734,8 @@
                 // Apply school filter if set
                 if (currentSchoolFilter) {
                     taskList = taskList.filter(t => {
-                        const school = (t.result?.school || t.params?.school || '').toUpperCase();
+                        // Prioritize school_code for unified matching
+                        const school = (t.result?.school_code || t.result?.school || t.params?.school || '').toUpperCase();
                         return school.includes(currentSchoolFilter);
                     });
                 }
@@ -1713,7 +1758,8 @@
                     'url_to_doc': { label: 'DOC', class: 'url-doc' },
                     'text_to_image': { label: 'IMG', class: 'text-img' },
                     'sources_image': { label: 'SRC', class: 'sources' },
-                    'gdoc_to_images': { label: 'IMG', class: 'doc-img' }
+                    'gdoc_to_images': { label: 'IMG', class: 'doc-img' },
+                    'full_pipeline': { label: 'PIPE', class: 'pipeline' }
                 };
                 const typeBadge = typeBadges[task.type] || { label: '?', class: 'default' };
                 
@@ -1738,8 +1784,8 @@
                          <circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
                        </svg>`;
                 
-                // School badge
-                const school = task.result?.school || task.params?.school || '';
+                // School badge - prioritize school_code for unified matching
+                const school = task.result?.school_code || task.result?.school || task.params?.school || '';
                 const schoolLower = school.toLowerCase();
                 let schoolClass = 'default';
                 let schoolLabel = school.toUpperCase().substring(0, 4);
@@ -1818,7 +1864,48 @@
                 
                 if (data.status === 'completed') {
                     eventSource.close();
-                    showToast('Task completed successfully');
+                    
+                    // Special handling for full_pipeline: add created sub-tasks to frontend
+                    if (data.type === 'full_pipeline' && data.result?.created_tasks) {
+                        const createdTasks = data.result.created_tasks;
+                        // Fetch full task data from server to get complete info
+                        Promise.all(createdTasks.map(subTask => 
+                            fetch(`/api/tasks/${subTask.task_id}`).then(r => r.json())
+                        )).then(fullTasks => {
+                            fullTasks.forEach(fullTask => {
+                                if (fullTask && fullTask.id) {
+                                    tasks[fullTask.id] = fullTask;
+                                }
+                            });
+                            renderTasks();
+                            showToast(`Pipeline completed: ${createdTasks.length} docs created`);
+                        }).catch(e => {
+                            console.error('Failed to fetch sub-tasks:', e);
+                            // Fallback: use minimal data
+                            createdTasks.forEach(subTask => {
+                                tasks[subTask.task_id] = {
+                                    id: subTask.task_id,
+                                    type: 'url_to_doc',
+                                    status: 'completed',
+                                    progress: 100,
+                                    message: 'Created via pipeline',
+                                    params: { pipeline_task: taskId },
+                                    result: {
+                                        title: subTask.title,
+                                        chinese_title: subTask.title,
+                                        doc_link: subTask.doc_link
+                                    },
+                                    created_at: new Date().toISOString(),
+                                    updated_at: new Date().toISOString()
+                                };
+                            });
+                            renderTasks();
+                            showToast(`Pipeline completed: ${createdTasks.length} docs created`);
+                        });
+                    } else {
+                        showToast('Task completed successfully');
+                    }
+                    
                     if (onComplete) onComplete(data);
                 } else if (data.status === 'error') {
                     eventSource.close();
@@ -1940,6 +2027,47 @@
         }
 
         // API calls
+        // Full Pipeline
+        async function submitFullPipeline() {
+            const school = document.getElementById('pipelineSchool').value;
+            
+            if (!school) {
+                showToast('Please select a school', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/full-pipeline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ school })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                
+                tasks[data.task_id] = { 
+                    id: data.task_id, 
+                    type: 'full_pipeline', 
+                    status: 'pending', 
+                    progress: 0,
+                    params: { school },
+                    created_at: new Date().toISOString()
+                };
+                renderTasks();
+                
+                subscribeToTask(data.task_id);
+                showToast('Pipeline started');
+                
+            } catch (e) {
+                showToast('Failed to start pipeline', 'error');
+                console.error(e);
+            }
+        }
+
         async function submitUrlToDoc() {
             const url = document.getElementById('urlInput').value.trim();
             const title = document.getElementById('urlTitle').value.trim();

@@ -1,11 +1,125 @@
 import json
 import os
 import re
-from typing import List, Dict
+from typing import List, Dict, Optional, Callable, Tuple
 from datetime import datetime, timedelta, date
 
 from news_bot.core import config, school_config
 from news_bot.reporting import google_docs_exporter
+
+
+def _sort_key(report: Dict) -> Tuple:
+    """Sort key for reports: newest first by publication date."""
+    date_str = report.get("reported_publication_date", "")
+    try:
+        if date_str and date_str != "N/A" and date_str != "Date not found":
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+            return (-date_obj.toordinal(), report.get("processing_timestamp", ""))
+    except (ValueError, AttributeError):
+        pass
+    return (0, report.get("processing_timestamp", ""))
+
+
+def process_reports_individually(
+    school_profile: dict,
+    reports: List[Dict],
+    progress_callback: Optional[Callable[[int, str], None]] = None
+) -> List[Dict]:
+    """
+    Process reports and export each to an individual Google Doc.
+    
+    Args:
+        school_profile: School configuration dict
+        reports: List of report dicts from main_orchestrator
+        progress_callback: Optional callback function(progress_pct, message) for UI updates
+    
+    Returns:
+        List of result dicts, each containing:
+        - chinese_title
+        - chinese_report (refined_chinese_news_report)
+        - english_summary
+        - source_url
+        - doc_link
+    """
+    def update_progress(pct: int, msg: str):
+        if progress_callback:
+            progress_callback(pct, msg)
+        print(f"[Coordinator {pct}%] {msg}")
+    
+    if not reports:
+        update_progress(100, "No reports to process")
+        return []
+    
+    update_progress(5, f"Processing {len(reports)} reports...")
+    
+    # Set default relevance values
+    for report in reports:
+        report["relevance_score"] = 10
+        report["relevance_reason"] = "已通过Step 1相关性筛选"
+    
+    # Sort by publication date (newest first)
+    sorted_reports = sorted(reports, key=_sort_key)
+    
+    # Extract intro
+    apply_intro_extraction(sorted_reports)
+    
+    update_progress(10, "Reports sorted and processed")
+    
+    # Get date range for doc title
+    start_date, end_date = config.get_news_date_range()
+    
+    # Export each report individually
+    results = []
+    total = len(sorted_reports)
+    
+    for i, report in enumerate(sorted_reports):
+        # Calculate progress: 10-95% for exporting
+        progress_pct = 10 + int((i / total) * 85)
+        
+        chinese_title = report.get("chinese_title", "Untitled")
+        update_progress(progress_pct, f"Exporting {i+1}/{total}: {chinese_title[:30]}...")
+        
+        try:
+            # Export single report to Google Doc
+            doc_link = google_docs_exporter.update_or_create_news_document(
+                school=school_profile,
+                reports_data=[report],  # Single report
+                week_start_date=start_date,
+                week_end_date=end_date,
+                is_email=False
+            )
+            
+            results.append({
+                "chinese_title": chinese_title,
+                "chinese_report": report.get("refined_chinese_news_report", ""),
+                "english_summary": report.get("english_summary", ""),
+                "source_url": report.get("source_url", ""),
+                "doc_link": doc_link,
+                "original_title": report.get("original_title", ""),
+                "reported_publication_date": report.get("reported_publication_date", "")
+            })
+            
+            if doc_link:
+                update_progress(progress_pct, f"Created doc for: {chinese_title[:30]}...")
+            else:
+                update_progress(progress_pct, f"Failed to create doc for: {chinese_title[:30]}...")
+                
+        except Exception as e:
+            print(f"Error exporting report {i+1}: {e}")
+            results.append({
+                "chinese_title": chinese_title,
+                "chinese_report": report.get("refined_chinese_news_report", ""),
+                "english_summary": report.get("english_summary", ""),
+                "source_url": report.get("source_url", ""),
+                "doc_link": None,
+                "doc_error": str(e),
+                "original_title": report.get("original_title", ""),
+                "reported_publication_date": report.get("reported_publication_date", "")
+            })
+    
+    update_progress(100, f"Completed: {len([r for r in results if r.get('doc_link')])} docs created")
+    return results
+
 
 # --------------------------
 # Step 1: 提取第一句作为 intro (Refinement is now done during translation)
@@ -52,21 +166,8 @@ def process_news_report(choosen_school: dict[str, str], input_path: str, output_
         report["relevance_score"] = 10  # All articles passed Step 1 filtering, so assume high relevance
         report["relevance_reason"] = "已通过Step 1相关性筛选 (Passed Step 1 relevance filter)"
     
-    # Sort by publication date (newest first), then by processing timestamp as tiebreaker
-    def sort_key(report):
-        date_str = report.get("reported_publication_date", "")
-        try:
-            # Try to parse date for sorting
-            if date_str and date_str != "N/A" and date_str != "Date not found":
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                # Use negative date for descending order (newest first)
-                return (-date_obj.toordinal(), report.get("processing_timestamp", ""))
-        except (ValueError, AttributeError):
-            pass
-        # Fallback: use processing timestamp (newest first)
-        return (0, report.get("processing_timestamp", ""))
-    
-    sorted_reports = sorted(reports, key=sort_key)
+    # Sort by publication date (newest first)
+    sorted_reports = sorted(reports, key=_sort_key)
 
     # Extract intro from already-refined reports (refinement now happens during translation)
     apply_intro_extraction(sorted_reports)
