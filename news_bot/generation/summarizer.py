@@ -58,6 +58,11 @@ The summary is for {audience_en}.
 - Verify all dates, names, and numbers against the article text
 - If information is unclear or missing, do not fill in gaps with assumptions
 
+### Quotes & Voices (Important)
+- You MUST include 1 or 2 direct quotes from key figures (e.g., Presidents, Researchers, Students) if present in the text.
+- Quotes add authority and natural tone. Do not summarize everything into indirect speech.
+- Format: "The quote content," said [Name/Role].
+
 ### （new）Strict Content Boundaries (Mandatory)
 
 - The summary must be a neutral restatement of facts explicitly reported in the article.
@@ -90,10 +95,13 @@ Focus on key information most relevant to {audience_en}, especially concerning:
 
 Key points to cover, ensuring important details are retained:
 - What happened (core event/announcement)?
+- Who said what? (Include direct quotes from key decision-makers or witnesses)
 - When and where did it happen (specific dates, locations)?
 - Who was involved (key individuals, groups, departments)?
 - Main consequences, implications, or direct impacts for {audience_en}
 - Include crucial numbers, statistics, or significant outcomes
+
+
 
 ### Style Requirements
 - Maintain a factual and objective tone
