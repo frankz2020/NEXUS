@@ -1,3 +1,5 @@
+#redeployment test
+
 # Project NEXUS - News Production Studio
 
 Project NEXUS is a comprehensive news production system designed to discover, verify, translate, and visualize news for international student communities. It combines automated discovery agents with a professional **Interactive Studio** web interface for editorial control.
