@@ -15,6 +15,43 @@ import json
 import base64
 
 
+def _decode_client_config(raw_value: str, source_label: str) -> dict | None:
+    """
+    Decode Google OAuth client config from a raw JSON string.
+    """
+    if not raw_value:
+        return None
+    try:
+        normalized = raw_value.strip()
+        decoder = json.JSONDecoder()
+        parsed, end = decoder.raw_decode(normalized)
+        trailing = normalized[end:].strip()
+        if trailing:
+            print(f"Warning: extra data found after JSON in {source_label}. Ignoring trailing characters.")
+        if isinstance(parsed, str):
+            parsed = json.loads(parsed)
+        if not isinstance(parsed, dict):
+            print(f"Error: Expected JSON object in {source_label}, got {type(parsed).__name__}.")
+            return None
+        return parsed
+    except Exception as e:
+        print(f"Error parsing {source_label}: {e}")
+        return None
+
+
+def _load_client_config_from_file(file_path: str) -> dict | None:
+    """
+    Load Google OAuth client config from a file path.
+    """
+    try:
+        with open(file_path, 'r') as handle:
+            raw_value = handle.read()
+        return _decode_client_config(raw_value, file_path)
+    except Exception as e:
+        print(f"Error reading OAuth credentials file {file_path}: {e}")
+        return None
+
+
 def _make_document_public(doc_id: str, creds) -> bool:
     """
     Sets the document to be viewable by anyone with the link.
@@ -108,12 +145,14 @@ def _get_credentials():
             if 'GOOGLE_OAUTH_CREDENTIALS_JSON' in os.environ:
                 try:
                     print("Initiating OAuth flow using GOOGLE_OAUTH_CREDENTIALS_JSON env var...")
-                    client_config = json.loads(os.environ['GOOGLE_OAUTH_CREDENTIALS_JSON'])
-                    flow = InstalledAppFlow.from_client_config(
-                        client_config, config.GOOGLE_DOCS_SCOPES)
-                    # NOTE: run_local_server requires a browser, which won't work in headless cloud envs
-                    # This path is mainly for local dev if they set the env var instead of file
-                    creds = flow.run_local_server(port=0)
+                    client_config = _decode_client_config(
+                        os.environ.get('GOOGLE_OAUTH_CREDENTIALS_JSON', ''),
+                        'GOOGLE_OAUTH_CREDENTIALS_JSON'
+                    )
+                    if client_config:
+                        flow = InstalledAppFlow.from_client_config(
+                            client_config, config.GOOGLE_DOCS_SCOPES)
+                        creds = flow.run_local_server(port=0)
                 except Exception as e:
                     print(f"Error initializing flow from env var: {e}")
 
@@ -121,9 +160,11 @@ def _get_credentials():
             if not creds and os.path.exists(config.OAUTH_CREDENTIALS_FILE):
                 try:
                     print("Initiating OAuth flow from credentials.json...")
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        config.OAUTH_CREDENTIALS_FILE, config.GOOGLE_DOCS_SCOPES)
-                    creds = flow.run_local_server(port=0)
+                    client_config = _load_client_config_from_file(config.OAUTH_CREDENTIALS_FILE)
+                    if client_config:
+                        flow = InstalledAppFlow.from_client_config(
+                            client_config, config.GOOGLE_DOCS_SCOPES)
+                        creds = flow.run_local_server(port=0)
                 except Exception as e_flow:
                     print(f"Error during OAuth flow: {e_flow}")
                     return None
