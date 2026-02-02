@@ -14,6 +14,10 @@ echo "Environment variables:"
 echo "  PORT: ${PORT:-NOT SET}"
 echo "  PYTHONPATH: ${PYTHONPATH:-NOT SET}"
 echo "  PLAYWRIGHT_BROWSERS_PATH: ${PLAYWRIGHT_BROWSERS_PATH:-NOT SET}"
+echo "  REDIS_URL: ${REDIS_URL:+SET}"
+echo "  REDIS_PRIVATE_URL: ${REDIS_PRIVATE_URL:+SET}"
+echo "  REDIS_TLS_URL: ${REDIS_TLS_URL:+SET}"
+echo "  REDIS_CONNECTION_URL: ${REDIS_CONNECTION_URL:+SET}"
 echo ""
 
 # Create credentials.json from environment variable if set
@@ -124,6 +128,34 @@ echo "Current directory: $(pwd)"
 echo "Listing credential files:"
 ls -la credentials.json token.pickle 2>&1 || echo "Some files missing"
 echo ""
+if [ -n "$REDIS_URL" ] || [ -n "$REDIS_PRIVATE_URL" ] || [ -n "$REDIS_TLS_URL" ] || [ -n "$REDIS_CONNECTION_URL" ]; then
+    echo "Checking Redis connectivity..."
+    python3 - <<'PY'
+import os
+import sys
+url = (
+    os.environ.get("REDIS_URL")
+    or os.environ.get("REDIS_PRIVATE_URL")
+    or os.environ.get("REDIS_TLS_URL")
+    or os.environ.get("REDIS_CONNECTION_URL")
+    or ""
+).strip()
+if not url:
+    print("Redis URL not set")
+    sys.exit(0)
+try:
+    import redis
+    client = redis.Redis.from_url(url, decode_responses=True)
+    client.ping()
+    tasks = client.hlen("nexus:tasks")
+    ordered = client.zcard("nexus:tasks:created")
+    print(f"Redis OK. tasks={tasks} ordered={ordered}")
+except Exception as exc:
+    print(f"Redis check failed: {exc}")
+    sys.exit(0)
+PY
+    echo ""
+fi
 echo "========================================="
 echo "Starting Gunicorn on 0.0.0.0:${PORT:-8080}"
 echo "========================================="

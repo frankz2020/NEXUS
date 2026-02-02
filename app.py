@@ -107,20 +107,14 @@ def redis_list_tasks():
     client = get_redis_client()
     assert client is not None
     task_ids = client.zrevrange(REDIS_TASKS_ZSET_KEY, 0, -1)
-    tasks_list = []
-    if task_ids:
-        raw_tasks = client.hmget(REDIS_TASKS_HASH_KEY, task_ids)
-        for raw in raw_tasks:
-            if raw:
-                tasks_list.append(json.loads(raw))
-        return tasks_list
-    raw_map = client.hgetall(REDIS_TASKS_HASH_KEY)
-    if not raw_map:
+    if not task_ids:
         return []
-    for raw in raw_map.values():
+    raw_tasks = client.hmget(REDIS_TASKS_HASH_KEY, task_ids)
+    tasks_list = []
+    for raw in raw_tasks:
         if raw:
             tasks_list.append(json.loads(raw))
-    return sorted(tasks_list, key=lambda x: x.get("created_at", ""), reverse=True)
+    return tasks_list
 
 
 def redis_delete_task(task_id: str):
