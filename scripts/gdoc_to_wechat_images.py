@@ -332,6 +332,87 @@ def _infer_school_dir(title: str) -> str:
     return f"{base}_Weekly"
 
 
+def _normalize_content(content: str, min_chars_per_paragraph: int = 50) -> str:
+    """
+    标准化内容格式，确保分段正确。
+    规则：每50字以上 + 句末标点自动分段
+    
+    句末标点包括：。？！…
+    标点后可跟引号：」』""'）】》
+    注意：允许句号和引号之间有空白，防止因空格导致引号被甩到下一段
+    """
+    # #region agent log
+    import json as _json; _logpath = '/Users/bihaotian/REPO/NEXUS/.cursor/debug.log'
+    with open(_logpath, 'a', encoding='utf-8') as _f: _f.write(_json.dumps({'hypothesisId':'A,B','location':'gdoc_to_wechat_images.py:_normalize_content:entry','message':'raw content sample','data':{'content_len':len(content),'sample':content[:200],'sample_repr':repr(content[:200])},'timestamp':__import__('time').time()},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    # 移除所有换行，合并为单行，但保留空格以便后续正则能匹配到间隔
+    text = content.replace('\r', '').replace('\n', '')
+    # 将多个空格合并为一个，避免过长空白
+    text = re.sub(r'\s+', ' ', text)
+    
+    # #region agent log
+    with open(_logpath, 'a', encoding='utf-8') as _f: _f.write(_json.dumps({'hypothesisId':'A,B','location':'gdoc_to_wechat_images.py:after_preprocess','message':'preprocessed text sample','data':{'text_len':len(text),'sample':text[:300],'sample_repr':repr(text[:300])},'timestamp':__import__('time').time()},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    # 句末标点 + (可选空白) + (可选的后引号/括号)
+    # 匹配模式：
+    # 1. 句末标点：。？！…
+    # 2. 可选空白：\s*
+    # 3. 后引号/括号：」』"'）】》 + 中文双引号 U+201C/U+201D
+    # 使用 Unicode 转义确保中文双引号被正确匹配
+    sentence_end_pattern = r'(?:[。？！]|\.{3}|…{1,2})\s*[」』\u201c\u201d"\'）】》]*'
+    
+    # #region agent log
+    with open(_logpath, 'a', encoding='utf-8') as _f: _f.write(_json.dumps({'hypothesisId':'C','location':'gdoc_to_wechat_images.py:pattern','message':'regex pattern','data':{'pattern':sentence_end_pattern,'pattern_repr':repr(sentence_end_pattern)},'timestamp':__import__('time').time()},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    result = []
+    current_paragraph = ""
+    last_end = 0
+    
+    # 找到所有句子结束位置
+    all_matches = list(re.finditer(sentence_end_pattern, text))
+    
+    # #region agent log
+    match_info = [{'start':m.start(),'end':m.end(),'matched':m.group(),'matched_repr':repr(m.group()),'context':text[max(0,m.start()-5):m.end()+5],'next_char':text[m.end()] if m.end()<len(text) else None,'next_char_ord':ord(text[m.end()]) if m.end()<len(text) else None,'next_char_hex':hex(ord(text[m.end()])) if m.end()<len(text) else None} for m in all_matches[:10]]
+    with open(_logpath, 'a', encoding='utf-8') as _f: _f.write(_json.dumps({'hypothesisId':'D','location':'gdoc_to_wechat_images.py:matches','message':'all regex matches (first 10)','data':{'match_count':len(all_matches),'matches':match_info},'timestamp':__import__('time').time()},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    # #region agent log - check quotes in text
+    quote_chars = [c for c in text if c in '"""\'\'「」『』']
+    quote_info = [{'char':c,'ord':ord(c),'hex':hex(ord(c))} for c in set(quote_chars)]
+    with open(_logpath, 'a', encoding='utf-8') as _f: _f.write(_json.dumps({'hypothesisId':'A','location':'gdoc_to_wechat_images.py:quotes','message':'quote characters in text','data':{'quote_info':quote_info,'pattern_chars':[{'char':c,'ord':ord(c),'hex':hex(ord(c))} for c in '」』""\'）】》']},'timestamp':__import__('time').time()},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    for match in all_matches:
+        # 从上次结束位置到这次匹配结束（包含标点和引号）
+        segment = text[last_end:match.end()]
+        current_paragraph += segment
+        last_end = match.end()
+        
+        # 检查是否需要分段：当前段落超过 min_chars_per_paragraph
+        if len(current_paragraph) >= min_chars_per_paragraph:
+            # strip() 会去掉段落首尾空格，也能去掉句末引号后的空格
+            result.append(current_paragraph.strip())
+            current_paragraph = ""
+    
+    # 处理剩余内容
+    if last_end < len(text):
+        current_paragraph += text[last_end:]
+    
+    if current_paragraph.strip():
+        result.append(current_paragraph.strip())
+    
+    # #region agent log
+    para_info = [{'idx':i,'len':len(p),'start':p[:30],'end':p[-30:] if len(p)>30 else p} for i,p in enumerate(result)]
+    with open(_logpath, 'a', encoding='utf-8') as _f: _f.write(_json.dumps({'hypothesisId':'A,B,C,D,E','location':'gdoc_to_wechat_images.py:result','message':'final paragraphs','data':{'para_count':len(result),'paragraphs':para_info},'timestamp':__import__('time').time()},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    # 用双换行连接段落
+    return '\n\n'.join(result)
+
+
 def render_to_images(
     items: List[Dict],
     *,
@@ -403,7 +484,7 @@ def render_to_images(
                 left_bar_color = "#022851" if (idx % 2 == 1) else "#FFBF00"
 
             title = it.get("title", "").strip()
-            content = it.get("content", "").strip()
+            content = _normalize_content(it.get("content", "").strip())
             
             # Use pre-fetched cover or existing one
             cover_image = it.get("cover_image") or cover_images.get(idx, "")

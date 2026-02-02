@@ -164,44 +164,54 @@ SCHOOL_CONFIG = {
     },
 }
 
-
+# !NOTE Do not touch this function. @Edwin
 def _normalize_content(content: str, min_chars_per_paragraph: int = 50) -> str:
     """
     标准化内容格式，确保分段正确。
-    规则：每50字以上 + 句号自动分段
+    规则：每50字以上 + 句末标点自动分段
+    
+    句末标点包括：。？！…
+    标点后可跟引号：」』"”'）】》
+    注意：允许句号和引号之间有空白，防止因空格导致引号被甩到下一段
     
     Args:
         content: 原始内容
         min_chars_per_paragraph: 每段最小字符数（默认50）
     """
-    # 移除所有换行和多余空格，合并为单行
-    text = content.strip()
-    text = re.sub(r'\s+', ' ', text)  # 所有空白变成单个空格
+    # 移除所有换行，合并为单行，但保留空格以便后续正则能匹配到间隔
+    text = content.replace('\r', '').replace('\n', '')
+    # 将多个空格合并为一个，避免过长空白
+    text = re.sub(r'\s+', ' ', text)
     
-    # 按句号分段（每50字以上+句号）
+    # 句末标点 + (可选空白) + (可选的后引号/括号)
+    # 匹配模式：
+    # 1. 句末标点：。？！…
+    # 2. 可选空白：\s*
+    # 3. 后引号/括号：」』"'）】》 + 中文双引号 U+201C/U+201D
+    # 使用 Unicode 转义确保中文双引号被正确匹配
+    sentence_end_pattern = r'(?:[。？！]|\.{3}|…{1,2})\s*[」』\u201c\u201d"\'）】》]*'
+    
     result = []
     current_paragraph = ""
+    last_end = 0
     
-    # 分割成句子（保留句号）
-    sentences = re.split(r'(。)', text)
-    
-    i = 0
-    while i < len(sentences):
-        part = sentences[i]
+    # 找到所有句子结束位置
+    for match in re.finditer(sentence_end_pattern, text):
+        # 从上次结束位置到这次匹配结束（包含标点和引号）
+        segment = text[last_end:match.end()]
+        current_paragraph += segment
+        last_end = match.end()
         
-        # 如果是句号，附加到当前段落
-        if part == '。':
-            current_paragraph += part
-            # 检查是否需要分段：当前段落超过 min_chars_per_paragraph
-            if len(current_paragraph) >= min_chars_per_paragraph:
-                result.append(current_paragraph.strip())
-                current_paragraph = ""
-        else:
-            current_paragraph += part
-        
-        i += 1
+        # 检查是否需要分段：当前段落超过 min_chars_per_paragraph
+        if len(current_paragraph) >= min_chars_per_paragraph:
+            # strip() 会去掉段落首尾空格，也能去掉句末引号后的空格
+            result.append(current_paragraph.strip())
+            current_paragraph = ""
     
     # 处理剩余内容
+    if last_end < len(text):
+        current_paragraph += text[last_end:]
+    
     if current_paragraph.strip():
         result.append(current_paragraph.strip())
     
