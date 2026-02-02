@@ -6,6 +6,7 @@
 import sys
 import os
 
+
 # Fix SSL certificate loading issue on macOS before any other imports
 # This must be done BEFORE importing requests or any module that uses it
 try:
@@ -49,10 +50,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger('nexus')
 
-REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+REDIS_URL = (
+    os.environ.get('REDIS_URL')
+    or os.environ.get('REDIS_PRIVATE_URL')
+    or os.environ.get('REDIS_TLS_URL')
+    or os.environ.get('REDIS_CONNECTION_URL')
+    or ''
+).strip()
 REDIS_TASKS_HASH_KEY = 'nexus:tasks'
 REDIS_TASKS_ZSET_KEY = 'nexus:tasks:created'
 redis_client = None
+if REDIS_URL:
+    logger.info("Redis configured for task persistence.")
+else:
+    logger.warning("Redis not configured; tasks are in-memory only.")
 
 
 def redis_enabled():
@@ -67,6 +78,7 @@ def get_redis_client():
         import redis
         redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
         redis_client.ping()
+        logger.info("Redis connection OK.")
     return redis_client
 
 
@@ -110,27 +122,6 @@ def redis_delete_task(task_id: str):
     assert client is not None
     client.hdel(REDIS_TASKS_HASH_KEY, task_id)
     client.zrem(REDIS_TASKS_ZSET_KEY, task_id)
-
-
-def mark_stale_tasks_on_startup():
-    if not redis_enabled():
-        return
-    tasks_list = redis_list_tasks()
-    if not tasks_list:
-        logger.info("Redis enabled with no existing tasks.")
-        return
-    now_iso = datetime.now().isoformat()
-    updated = 0
-    for task in tasks_list:
-        status = task.get("status")
-        if status in ["pending", "running"]:
-            task["status"] = "error"
-            task["message"] = "Server restarted before task completed"
-            task["error"] = "Server restarted before task completed"
-            task["updated_at"] = now_iso
-            redis_write_task(task)
-            updated += 1
-    logger.info(f"Marked {updated} stale tasks as error on startup.")
 
 
 # Add project root to path
@@ -187,7 +178,6 @@ def restore_credentials_from_env():
 
 # Try to restore credentials on startup
 restore_credentials_from_env()
-mark_stale_tasks_on_startup()
 
 # Pre-import modules (optional, will be imported in workers if this fails)
 try:
@@ -686,6 +676,8 @@ def worker_full_pipeline(task_id: str, school_code: str):
             if doc_result.get("doc_link"):
                 # Create a completed url_to_doc task for each doc
                 sub_task_id = str(uuid.uuid4())[:8]
+                created_at = datetime.now().isoformat()
+                created_ts = time.time()
                 with task_lock:
                     tasks[sub_task_id] = {
                         "id": sub_task_id,
@@ -707,10 +699,12 @@ def worker_full_pipeline(task_id: str, school_code: str):
                             "doc_link": doc_result.get("doc_link"),
                         },
                         "error": None,
-                        "created_at": datetime.now().isoformat(),
-                        "updated_at": datetime.now().isoformat(),
+                        "created_at": created_at,
+                        "updated_at": created_at,
                     }
                     sse_queues[sub_task_id] = Queue()
+                    if redis_enabled():
+                        redis_write_task(tasks[sub_task_id], set_created=True, created_ts=created_ts)
                 created_tasks.append({
                     "task_id": sub_task_id,
                     "title": doc_result.get("chinese_title"),
