@@ -26,6 +26,7 @@ import uuid
 import threading
 import traceback
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
@@ -45,6 +46,90 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stderr)]
 )
 logger = logging.getLogger('nexus')
+
+REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+REDIS_TASKS_HASH_KEY = 'nexus:tasks'
+REDIS_TASKS_ZSET_KEY = 'nexus:tasks:created'
+redis_client = None
+
+
+def redis_enabled():
+    return bool(REDIS_URL)
+
+
+def get_redis_client():
+    global redis_client
+    if not REDIS_URL:
+        return None
+    if redis_client is None:
+        import redis
+        redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        redis_client.ping()
+    return redis_client
+
+
+def redis_write_task(task, set_created=False, created_ts=None):
+    client = get_redis_client()
+    assert client is not None
+    task_id = task.get("id")
+    assert task_id
+    client.hset(REDIS_TASKS_HASH_KEY, task_id, json.dumps(task))
+    if set_created:
+        if created_ts is None:
+            created_ts = time.time()
+        client.zadd(REDIS_TASKS_ZSET_KEY, {task_id: created_ts})
+
+
+def redis_get_task(task_id: str):
+    client = get_redis_client()
+    assert client is not None
+    raw = client.hget(REDIS_TASKS_HASH_KEY, task_id)
+    if not raw:
+        return None
+    return json.loads(raw)
+
+
+def redis_list_tasks():
+    client = get_redis_client()
+    assert client is not None
+    task_ids = client.zrevrange(REDIS_TASKS_ZSET_KEY, 0, -1)
+    if not task_ids:
+        return []
+    raw_tasks = client.hmget(REDIS_TASKS_HASH_KEY, task_ids)
+    tasks_list = []
+    for raw in raw_tasks:
+        if raw:
+            tasks_list.append(json.loads(raw))
+    return tasks_list
+
+
+def redis_delete_task(task_id: str):
+    client = get_redis_client()
+    assert client is not None
+    client.hdel(REDIS_TASKS_HASH_KEY, task_id)
+    client.zrem(REDIS_TASKS_ZSET_KEY, task_id)
+
+
+def mark_stale_tasks_on_startup():
+    if not redis_enabled():
+        return
+    tasks_list = redis_list_tasks()
+    if not tasks_list:
+        logger.info("Redis enabled with no existing tasks.")
+        return
+    now_iso = datetime.now().isoformat()
+    updated = 0
+    for task in tasks_list:
+        status = task.get("status")
+        if status in ["pending", "running"]:
+            task["status"] = "error"
+            task["message"] = "Server restarted before task completed"
+            task["error"] = "Server restarted before task completed"
+            task["updated_at"] = now_iso
+            redis_write_task(task)
+            updated += 1
+    logger.info(f"Marked {updated} stale tasks as error on startup.")
+
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -100,6 +185,7 @@ def restore_credentials_from_env():
 
 # Try to restore credentials on startup
 restore_credentials_from_env()
+mark_stale_tasks_on_startup()
 
 # Pre-import modules (optional, will be imported in workers if this fails)
 try:
@@ -277,6 +363,8 @@ sse_queues: Dict[str, Queue] = {}  # task_id -> queue for SSE updates
 def create_task(task_type: str, params: dict) -> str:
     """Create a new task and return its ID."""
     task_id = str(uuid.uuid4())[:8]
+    created_at = datetime.now().isoformat()
+    created_ts = time.time()
     with task_lock:
         tasks[task_id] = {
             "id": task_id,
@@ -287,19 +375,25 @@ def create_task(task_type: str, params: dict) -> str:
             "params": params,
             "result": None,
             "error": None,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": created_at,
+            "updated_at": created_at,
         }
         sse_queues[task_id] = Queue()
+        if redis_enabled():
+            redis_write_task(tasks[task_id], set_created=True, created_ts=created_ts)
     return task_id
 
 def update_task(task_id: str, status: str = None, progress: int = None, 
                 message: str = None, result: Any = None, error: str = None):
     """Update task status and broadcast to SSE."""
     with task_lock:
-        if task_id not in tasks:
+        task = tasks.get(task_id)
+        if not task and redis_enabled():
+            task = redis_get_task(task_id)
+            if task:
+                tasks[task_id] = task
+        if not task:
             return
-        task = tasks[task_id]
         if status:
             task["status"] = status
         if progress is not None:
@@ -312,6 +406,8 @@ def update_task(task_id: str, status: str = None, progress: int = None,
             task["error"] = error
             task["status"] = "error"
         task["updated_at"] = datetime.now().isoformat()
+        if redis_enabled():
+            redis_write_task(task)
         
         # Broadcast to SSE queue
         if task_id in sse_queues:
@@ -319,11 +415,16 @@ def update_task(task_id: str, status: str = None, progress: int = None,
 
 def get_task(task_id: str) -> Optional[dict]:
     """Get task by ID."""
+    if redis_enabled():
+        task = redis_get_task(task_id)
+        return task.copy() if task else None
     with task_lock:
         return tasks.get(task_id, {}).copy() if task_id in tasks else None
 
 def list_tasks() -> list:
     """List all tasks, newest first."""
+    if redis_enabled():
+        return redis_list_tasks()
     with task_lock:
         return sorted(tasks.values(), key=lambda x: x["created_at"], reverse=True)
 
@@ -841,6 +942,8 @@ def api_delete_task(task_id):
             del tasks[task_id]
         if task_id in sse_queues:
             del sse_queues[task_id]
+        if redis_enabled():
+            redis_delete_task(task_id)
     return jsonify({"success": True})
 
 @app.route('/api/tasks/<task_id>/stream')
@@ -848,11 +951,30 @@ def api_delete_task(task_id):
 def api_task_stream(task_id):
     """SSE stream for task updates."""
     def generate():
-        if task_id not in sse_queues:
-            yield f"data: {json.dumps({'error': 'Task not found'})}\n\n"
+        queue = sse_queues.get(task_id)
+        if not queue:
+            if not redis_enabled():
+                yield f"data: {json.dumps({'error': 'Task not found'})}\n\n"
+                return
+            task = get_task(task_id)
+            if not task:
+                yield f"data: {json.dumps({'error': 'Task not found'})}\n\n"
+                return
+            last_payload = None
+            while True:
+                task = get_task(task_id)
+                if not task:
+                    yield f"data: {json.dumps({'error': 'Task not found'})}\n\n"
+                    return
+                payload = json.dumps(task)
+                if payload != last_payload:
+                    yield f"data: {payload}\n\n"
+                    last_payload = payload
+                if task.get("status") in ["completed", "error"]:
+                    break
+                time.sleep(2)
             return
         
-        queue = sse_queues[task_id]
         # Send current state first
         task = get_task(task_id)
         if task:
