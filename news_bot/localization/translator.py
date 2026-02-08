@@ -65,6 +65,9 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 
 ## 要求
 
+### 内容安全警告 (Strict)
+- **禁止政治敏感内容：** 如果源文本包含中国政治、敏感地缘政治或政府层面的外交纠纷，请不要翻译。直接回复 "SKIP: POLITICAL CONTENT"。
+
 ### 准确性与事实性（最高优先级）
 - 仅翻译英文摘要中明确陈述的信息 - 不要添加、推断或猜测
 - 保留所有事实细节：日期、姓名、数字、地点、组织
@@ -73,9 +76,11 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 - 对照原始英文文本验证所有翻译
 
 ### 标题生成要求
-1. 创建简洁、相关且吸引人的简体中文新闻标题
+1. 自然流畅：创建简洁、相关且吸引人的简体中文新闻标题
 2. 将标题放在第一行，前缀为"Chinese Title:"
-3. 如果单行标题超过15个中文字符，将其分成2个逗号分隔的段落，每段≤12个字符，在自然语义断点处分割
+3. a. 格式自由： 不需要强制分为两段，也不要强制使用逗号隔开。如果一句话能完整、清晰地表达新闻核心，就使用一句话。
+   b. 长度适中：中文字符在20个以内，不要超过25个。
+   c. 意会生成：不要逐字翻译原标题，要根据新闻内容“意会”出一个符合中文阅读习惯的标题。
 4. 对于每条新闻，考虑三种标题风格：
    a) 弱点击诱式
    b) 口语化风格
@@ -97,7 +102,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
     - 若有常用中文名则用中文（如：哈佛、耶鲁）。
     - 若无常用中文名，保留英文原名。
    4. **禁止括注：** 所有校名均不添加括号备注。
-
+9. 去冒号/逗号化： 鼓励使用空格代替逗号或冒号来分隔意群，或者重写为单句。
 ### 专名与地名处理规则（强制执行，覆盖其他规则）
 
 #### A. 学校名称（University / College / Institute 等）
@@ -164,7 +169,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 3. 保持语言自然专业 - 尽量减少形容词
 4. 保持句子之间的逻辑连贯有序
 5. 不要包含额外的评论或观点
-6. 不要写结论 - 如果提到，可以以最新更新结尾，例如："目前，学校对此事件还没有做出回应。"
+6. 不要写结论 - 如果提到，可以以最新更新结尾. 新闻应以最后一个具体的事实、引用或后续安排自然结束
 7. 需要稍微有一点粗糙感，但是保持专业性，不要有AI味
 8. 减少不常见的标点符号的使用。
 9. 引语处理（绝对强制）：
@@ -237,6 +242,11 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
         elapsed = time.time() - start_time
         
         if full_response_text:
+            # Handle political skip flag
+            if "SKIP: POLITICAL CONTENT" in full_response_text:
+                logger.warning(f"[TRANSLATE] 🛑 Content skipped during translation (Political). URL: {source_url}")
+                return None
+
             logger.info(f"[TRANSLATE] Response received: {len(full_response_text)} chars (took {elapsed:.2f}s)")
             logger.debug(f"[TRANSLATE] Response preview: {full_response_text[:200]}...")
             
