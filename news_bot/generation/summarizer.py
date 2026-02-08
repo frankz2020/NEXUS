@@ -51,12 +51,23 @@ The summary is for {audience_en}.
 
 ## Requirements
 
+### Safety & Content Exclusion (STRICT)
+- **NO CHINESE POLITICS:** You must NOT summarize articles related to Chinese domestic politics, sensitive geopolitical issues between China and other nations, or Chinese government policies unrelated to education.
+- If the article is primarily about political disputes, ideology, or sensitive diplomatic friction involving China:
+  - **STOP.** Return exactly this string: "SUMMARY_SKIPPED_SENSITIVE_TOPIC"
+- Only summarize content related to university news, student life, local safety, academic policies, or general immigration/visa updates relevant to students.
+
 ### Accuracy & Factuality (Highest Priority)
 - Include ONLY information explicitly stated in the article text
 - Do NOT infer, guess, or add information not present in the article
 - Do NOT include personal opinions, interpretations, or conclusions not in the original text
 - Verify all dates, names, and numbers against the article text
 - If information is unclear or missing, do not fill in gaps with assumptions
+
+### Quotes & Voices (Important)
+- You MUST include 1 or 2 direct quotes from key figures (e.g., Presidents, Researchers, Students) if present in the text.
+- Quotes add authority and natural tone. Do not summarize everything into indirect speech.
+- Format: "The quote content," said [Name/Role].
 
 ### （new）Strict Content Boundaries (Mandatory)
 
@@ -90,10 +101,13 @@ Focus on key information most relevant to {audience_en}, especially concerning:
 
 Key points to cover, ensuring important details are retained:
 - What happened (core event/announcement)?
+- Who said what? (Include direct quotes from key decision-makers or witnesses)
 - When and where did it happen (specific dates, locations)?
 - Who was involved (key individuals, groups, departments)?
 - Main consequences, implications, or direct impacts for {audience_en}
 - Include crucial numbers, statistics, or significant outcomes
+
+
 
 ### Style Requirements
 - Maintain a factual and objective tone
@@ -146,6 +160,12 @@ Detailed News Summary (5-7 sentences, 100-180 words, for {audience_en}):
             logger.warning(f"[SUMMARIZE] Empty summary received (took {elapsed:.2f}s)")
             print(f"Warning: Empty summary received from OpenRouter for {article_url}. Text length: {len(article_text)} chars.")
             return "Summarization failed: AI returned empty response."
+        
+        # Handle the sensitive topic flag
+        if "SUMMARY_SKIPPED_SENSITIVE_TOPIC" in summary_text:
+            logger.warning(f"[SUMMARIZE] 🛑 Article skipped due to sensitive/political content constraint. URL: {article_url}")
+            print(f"Skipping article: Identified as sensitive/political content.")
+            return None
 
         logger.info(f"[SUMMARIZE] ✅ Summary generated: {len(summary_text)} chars (took {elapsed:.2f}s)")
         logger.debug(f"[SUMMARIZE] Summary preview: {summary_text[:150]}...")
