@@ -55,7 +55,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
     logger.info(f"[TRANSLATE] Using model: {config.GEMINI_PRO_MODEL}")
     print(f"Translating, generating title, and refining Chinese news report for: {source_url[:100]}...")
 
-    prompt = f"""你是一位专业的中文新闻写作者和翻译。你的任务是将英文新闻摘要翻译成一篇准确、精炼的中文新闻，并生成一个吸引人的标题。
+    prompt = f"""你是一位专业的中文新闻写作者和翻译。你的任务是将英文新闻摘要翻译成一篇准确、客观、精炼的中文新闻，并生成一个吸引人的标题。
 
 ## 角色
 你是一位专业的中文新闻写作者，专门为中国留学生撰写准确、精炼的新闻。
@@ -73,6 +73,9 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 - 保留所有事实细节：日期、姓名、数字、地点、组织
 - 不要添加原文中没有的后果、影响或观点
 - 避免使用"可能"、"引发"、"导致"等暗示未陈述后果的词语
+- 严禁擅自“加戏”（主观色彩违规）- 翻译 noted, stated, mentioned, pointed out 时，只能使用中立词汇（如：表示、指出、提到、认为）。
+不要使用有判断色彩的词，除非原文明确使用了 emphasize/stress/warn 等强烈动词。
+- 严禁在文中出现“旨在”、“意在”、“致力于”这三个词
 - 对照原始英文文本验证所有翻译
 
 ### 逻辑与归属权校对（Critical - 针对语意修复）
@@ -177,6 +180,16 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 4. 对于不太常见的英文人名、组织名或项目名，翻译成中文并在括号中保留英文：中文名 (English Name)
    - 如果无法提供中文译名，则直接保留英文原名，不要添加括号重复一遍（例如：不要写 "Mike (Mike)"，直接写 "Mike"）。
 5. 对于非常知名的实体或常见的英文名称，可以直接使用中文翻译
+
+### 信息合并与人名去重
+**“一现”原则（Hard Limit）：** 在同一个自然段内，同一个人的名字（尤其是冗长的英文名，如 Berlin, Loganathan Palanikumar）**最多只能作为主语出现一次**！
+- **强制代词替换：** 第二次及以后提到该人时，**绝对禁止**再次重复其全名或姓氏，**必须**使用代词“他”或“她”，或者直接合并句子。
+- **纠错案例（必须严格模仿）：**
+  - ❌ 错误：Berlin目前担任主教。作为校友，Berlin曾在神学院任职。Berlin的履历十分资深。
+  - ✅ 正确：Berlin目前担任主教。作为校友，**他**曾在神学院任职。**他**的履历十分资深。
+  - ❌ 错误：Smith指出该项目很危险。Smith表示：“我们必须停止。”
+  - ✅ 正确：Smith指出该项目很危险，**并补充道**：“我们必须停止。” (合并主语)
+- **逻辑归属准确：** 绝对不要将“群体的普遍观点”强加给“某一个人”作为直接引语（如：不能写 一位学生表示：“受访学生均强调…”）。群体观点用群体主语，个人观点用个人主语。
 
 ### 风格与精炼要求
 1. 使用严肃、正式、客观的新闻写作风格，但是不要写得很生硬，要自然，不要有AI味。读者是留学生。
