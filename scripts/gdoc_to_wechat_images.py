@@ -157,6 +157,11 @@ def _first_image_url(paragraph: Dict, inline_objects: Dict) -> str:
 def _all_links(paragraph: Dict) -> List[str]:
     out = []
     for e in paragraph.get("elements", []):
+        rich = e.get("richLink")
+        if rich:
+            uri = (rich.get("richLinkProperties", {}) or {}).get("uri")
+            if uri:
+                out.append(uri.strip())
         tr = e.get("textRun")
         if not tr:
             continue
