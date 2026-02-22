@@ -728,7 +728,7 @@ def worker_full_pipeline(task_id: str, school_code: str):
         update_task(task_id, error=str(e))
 
 
-def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
+def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, skip_image_fetch: bool = False):
     """Generate WeChat images from Google Doc."""
     try:
         update_task(task_id, status="running", progress=10, message="Fetching document...")
@@ -752,7 +752,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         update_task(task_id, progress=30, message="Parsing document...")
         
         # Parse articles from doc
-        items = parse_news_from_doc(doc, extract_images=True)
+        items = parse_news_from_doc(doc, extract_images=not skip_image_fetch)
         
         if not items:
             update_task(task_id, error="No articles found in document")
@@ -804,7 +804,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
             title_size=22.5,
             body_size=22.5,
             top_n=10,
-            skip_image_fetch=False,
+            skip_image_fetch=skip_image_fetch,
             school_name=school_name,
         )
         
