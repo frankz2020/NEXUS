@@ -2137,7 +2137,7 @@
                     const res = await fetch('/api/gdoc-to-images', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ doc_url: docUrl, school, skip_image_fetch: skipImageFetch })
+                        body: JSON.stringify({ doc_url: docUrl, school, skip_image_fetch: skipImageFetch, fetch_images: fetchImages })
                     });
                     const data = await res.json();
                     
@@ -2185,7 +2185,8 @@
                             body: {
                                 doc_url: t.result.doc_link,
                                 school: school,
-                                skip_image_fetch: skipImageFetch
+                                skip_image_fetch: skipImageFetch,
+                                fetch_images: fetchImages
                             },
                             params: { title: cachedTitle, school: school }
                         };
@@ -2228,7 +2229,7 @@
                 const res = await fetch('/api/gdoc-to-images', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ doc_url: docUrl, school, skip_image_fetch: skipImageFetch })
+                    body: JSON.stringify({ doc_url: docUrl, school, skip_image_fetch: skipImageFetch, fetch_images: fetchImages })
                 });
                 const data = await res.json();
                 

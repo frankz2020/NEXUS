@@ -405,6 +405,7 @@ def render_to_images(
     body_size: float,
     top_n: int,
     skip_image_fetch: bool = False,
+    force_no_cover: bool = False,
     school_name: str = "",
 ) -> List[str]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -427,11 +428,13 @@ def render_to_images(
     # 命中任意一个都算 UCD（用于交替色）
     is_ucd = ("DAVIS" in upper_name) or ("UC DAVIS" in upper_name) or ("UCD" in upper_name)
 
+    effective_skip_fetch = skip_image_fetch or force_no_cover
+    
     # ========== OPTIMIZATION 1: Parallel cover image fetching ==========
     def fetch_cover_for_item(idx_item):
         idx, it = idx_item
         cover_image = it.get("cover_image") or ""
-        if not cover_image and not skip_image_fetch:
+        if not cover_image and not effective_skip_fetch:
             src_url = (it.get("source_url") or "").strip()
             if src_url:
                 print(f"  [{idx}] Fetching cover from: {src_url[:50]}...")
@@ -440,7 +443,7 @@ def render_to_images(
     
     cover_images = {}
     items_needing_fetch = [(i, it) for i, it in enumerate(items, 1) 
-                           if not it.get("cover_image") and not skip_image_fetch]
+                           if not it.get("cover_image") and not effective_skip_fetch]
     
     if items_needing_fetch:
         print(f"  [*] Fetching {len(items_needing_fetch)} cover images in parallel...")
@@ -467,7 +470,10 @@ def render_to_images(
             content = _normalize_content(it.get("content", "").strip())
             
             # Use pre-fetched cover or existing one
-            cover_image = it.get("cover_image") or cover_images.get(idx, "")
+            if force_no_cover:
+                cover_image = ""
+            else:
+                cover_image = it.get("cover_image") or cover_images.get(idx, "")
 
             out_png = school_out / f"{idx:02d}_{_slug(title)[:40]}.png"
 
@@ -584,6 +590,7 @@ def main():
         body_size=args.body_size,
         top_n=args.top_n,
         skip_image_fetch=args.no_images,
+        force_no_cover=args.no_images,
         school_name=school_name,
     )
     print("Done.")
