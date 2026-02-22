@@ -728,7 +728,7 @@ def worker_full_pipeline(task_id: str, school_code: str):
         update_task(task_id, error=str(e))
 
 
-def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, skip_image_fetch: bool = False):
+def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
     """Generate WeChat images from Google Doc."""
     try:
         update_task(task_id, status="running", progress=10, message="Fetching document...")
@@ -752,7 +752,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, skip_im
         update_task(task_id, progress=30, message="Parsing document...")
         
         # Parse articles from doc
-        items = parse_news_from_doc(doc, extract_images=not skip_image_fetch)
+        items = parse_news_from_doc(doc, extract_images=True)
         
         if not items:
             update_task(task_id, error="No articles found in document")
@@ -804,8 +804,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, skip_im
             title_size=22.5,
             body_size=22.5,
             top_n=10,
-            skip_image_fetch=skip_image_fetch,
-            force_no_cover=skip_image_fetch,
+            skip_image_fetch=False,
             school_name=school_name,
         )
         
@@ -1127,23 +1126,6 @@ def api_gdoc_to_images():
     data = request.json
     doc_url = data.get('doc_url', '').strip()
     school = data.get('school', '').strip().upper() or None
-    skip_image_fetch = data.get('skip_image_fetch')
-    fetch_images = data.get('fetch_images')
-    if fetch_images is not None:
-        if isinstance(fetch_images, str):
-            fetch_images = fetch_images.strip().lower() in {"1", "true", "yes", "y", "on"}
-        else:
-            fetch_images = bool(fetch_images)
-        skip_image_fetch = not fetch_images
-    else:
-        if skip_image_fetch is None:
-            skip_image_fetch = data.get('no_images')
-        if isinstance(skip_image_fetch, str):
-            skip_image_fetch = skip_image_fetch.strip().lower() in {"1", "true", "yes", "y", "on"}
-        elif skip_image_fetch is None:
-            skip_image_fetch = False
-        else:
-            skip_image_fetch = bool(skip_image_fetch)
     
     if not doc_url:
         return jsonify({"error": "Google Doc URL is required"}), 400
@@ -1159,22 +1141,10 @@ def api_gdoc_to_images():
     if school and school not in SCHOOLS:
         return jsonify({"error": f"Invalid school. Choose from: {list(SCHOOLS.keys())}"}), 400
     
-    task_id = create_task(
-        "gdoc_to_images",
-        {
-            "doc_id": doc_id[:20] + "...",
-            "school": school,
-            "skip_image_fetch": skip_image_fetch,
-            "user": current_user.username,
-        },
-    )
-    log_user_activity(
-        current_user.id,
-        'task_create',
-        {'type': 'gdoc_to_images', 'task_id': task_id, 'school': school, 'skip_image_fetch': skip_image_fetch},
-    )
+    task_id = create_task("gdoc_to_images", {"doc_id": doc_id[:20] + "...", "school": school, "user": current_user.username})
+    log_user_activity(current_user.id, 'task_create', {'type': 'gdoc_to_images', 'task_id': task_id, 'school': school})
     
-    thread = threading.Thread(target=worker_gdoc_to_images, args=(task_id, doc_id, school, skip_image_fetch))
+    thread = threading.Thread(target=worker_gdoc_to_images, args=(task_id, doc_id, school))
     thread.daemon = True
     thread.start()
     

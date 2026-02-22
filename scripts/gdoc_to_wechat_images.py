@@ -157,11 +157,6 @@ def _first_image_url(paragraph: Dict, inline_objects: Dict) -> str:
 def _all_links(paragraph: Dict) -> List[str]:
     out = []
     for e in paragraph.get("elements", []):
-        rich = e.get("richLink")
-        if rich:
-            uri = (rich.get("richLinkProperties", {}) or {}).get("uri")
-            if uri:
-                out.append(uri.strip())
         tr = e.get("textRun")
         if not tr:
             continue
@@ -175,15 +170,6 @@ def _all_links(paragraph: Dict) -> List[str]:
 
 def _clean_paragraph_text(s: str) -> str:
     return s.replace("\r", "").strip()
-
-
-_URL_RE = re.compile(r"https?://[^\s\)\]\}，。；、]+", re.IGNORECASE)
-
-
-def _urls_from_text(s: str) -> List[str]:
-    if not s:
-        return []
-    return [m.group(0) for m in _URL_RE.finditer(s)]
 
 
 def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
@@ -305,8 +291,6 @@ def parse_news_from_doc(doc: Dict, extract_images: bool = True) -> List[Dict]:
                 cur["cover_image"] = img
 
         links = _all_links(p)
-        # Also capture plain-text URLs (not hyperlink-formatted)
-        links += _urls_from_text(text_content)
         if links:
             for u in links:
                 if u not in cur["source_urls"]:
@@ -410,7 +394,6 @@ def render_to_images(
     body_size: float,
     top_n: int,
     skip_image_fetch: bool = False,
-    force_no_cover: bool = False,
     school_name: str = "",
 ) -> List[str]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -433,13 +416,11 @@ def render_to_images(
     # 命中任意一个都算 UCD（用于交替色）
     is_ucd = ("DAVIS" in upper_name) or ("UC DAVIS" in upper_name) or ("UCD" in upper_name)
 
-    effective_skip_fetch = skip_image_fetch or force_no_cover
-    
     # ========== OPTIMIZATION 1: Parallel cover image fetching ==========
     def fetch_cover_for_item(idx_item):
         idx, it = idx_item
         cover_image = it.get("cover_image") or ""
-        if not cover_image and not effective_skip_fetch:
+        if not cover_image and not skip_image_fetch:
             src_url = (it.get("source_url") or "").strip()
             if src_url:
                 print(f"  [{idx}] Fetching cover from: {src_url[:50]}...")
@@ -448,7 +429,7 @@ def render_to_images(
     
     cover_images = {}
     items_needing_fetch = [(i, it) for i, it in enumerate(items, 1) 
-                           if not it.get("cover_image") and not effective_skip_fetch]
+                           if not it.get("cover_image") and not skip_image_fetch]
     
     if items_needing_fetch:
         print(f"  [*] Fetching {len(items_needing_fetch)} cover images in parallel...")
@@ -475,10 +456,7 @@ def render_to_images(
             content = _normalize_content(it.get("content", "").strip())
             
             # Use pre-fetched cover or existing one
-            if force_no_cover:
-                cover_image = ""
-            else:
-                cover_image = it.get("cover_image") or cover_images.get(idx, "")
+            cover_image = it.get("cover_image") or cover_images.get(idx, "")
 
             out_png = school_out / f"{idx:02d}_{_slug(title)[:40]}.png"
 
@@ -595,7 +573,6 @@ def main():
         body_size=args.body_size,
         top_n=args.top_n,
         skip_image_fetch=args.no_images,
-        force_no_cover=args.no_images,
         school_name=school_name,
     )
     print("Done.")

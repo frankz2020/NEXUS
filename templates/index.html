@@ -1357,12 +1357,6 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">
-                                <input type="checkbox" id="gdocFetchImages" checked>
-                                抓取封面图
-                            </label>
-                        </div>
                         <button class="btn btn-primary btn-full" onclick="submitGdocToImages()">
                             Generate Images
                         </button>
@@ -2122,8 +2116,6 @@
         async function submitGdocToImages() {
             const docUrl = document.getElementById('gdocInput').value.trim();
             const school = document.getElementById('gdocSchool').value || 'NYU';
-            const fetchImages = document.getElementById('gdocFetchImages')?.checked ?? true;
-            const skipImageFetch = !fetchImages;
             
             // Priority: URL Input > Selected Docs
             if (docUrl) {
@@ -2137,7 +2129,7 @@
                     const res = await fetch('/api/gdoc-to-images', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ doc_url: docUrl, school, skip_image_fetch: skipImageFetch, fetch_images: fetchImages })
+                        body: JSON.stringify({ doc_url: docUrl, school })
                     });
                     const data = await res.json();
                     
@@ -2184,9 +2176,7 @@
                             type: 'gdoc_to_images',
                             body: {
                                 doc_url: t.result.doc_link,
-                                school: school,
-                                skip_image_fetch: skipImageFetch,
-                                fetch_images: fetchImages
+                                school: school
                             },
                             params: { title: cachedTitle, school: school }
                         };
@@ -2229,7 +2219,7 @@
                 const res = await fetch('/api/gdoc-to-images', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ doc_url: docUrl, school, skip_image_fetch: skipImageFetch, fetch_images: fetchImages })
+                    body: JSON.stringify({ doc_url: docUrl, school })
                 });
                 const data = await res.json();
                 
