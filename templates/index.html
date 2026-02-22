@@ -1359,8 +1359,8 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">
-                                <input type="checkbox" id="gdocSkipImages">
-                                Skip cover image fetching
+                                <input type="checkbox" id="gdocFetchImages" checked>
+                                抓取封面图
                             </label>
                         </div>
                         <button class="btn btn-primary btn-full" onclick="submitGdocToImages()">
@@ -2122,7 +2122,8 @@
         async function submitGdocToImages() {
             const docUrl = document.getElementById('gdocInput').value.trim();
             const school = document.getElementById('gdocSchool').value || 'NYU';
-            const skipImageFetch = document.getElementById('gdocSkipImages')?.checked || false;
+            const fetchImages = document.getElementById('gdocFetchImages')?.checked ?? true;
+            const skipImageFetch = !fetchImages;
             
             // Priority: URL Input > Selected Docs
             if (docUrl) {

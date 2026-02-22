@@ -172,6 +172,15 @@ def _clean_paragraph_text(s: str) -> str:
     return s.replace("\r", "").strip()
 
 
+_URL_RE = re.compile(r"https?://[^\s\)\]\}，。；、]+", re.IGNORECASE)
+
+
+def _urls_from_text(s: str) -> List[str]:
+    if not s:
+        return []
+    return [m.group(0) for m in _URL_RE.finditer(s)]
+
+
 def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
     """
     从来源页面抓取封面图片（og:image, twitter:image 等）
@@ -291,6 +300,8 @@ def parse_news_from_doc(doc: Dict, extract_images: bool = True) -> List[Dict]:
                 cur["cover_image"] = img
 
         links = _all_links(p)
+        # Also capture plain-text URLs (not hyperlink-formatted)
+        links += _urls_from_text(text_content)
         if links:
             for u in links:
                 if u not in cur["source_urls"]:
