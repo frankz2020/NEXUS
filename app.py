@@ -728,7 +728,7 @@ def worker_full_pipeline(task_id: str, school_code: str):
         update_task(task_id, error=str(e))
 
 
-def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
+def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, need_images: bool = True):
     """Generate WeChat images from Google Doc."""
     try:
         update_task(task_id, status="running", progress=10, message="Fetching document...")
@@ -751,7 +751,8 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
         doc_title = (doc.get('title') or 'Untitled').strip()
         update_task(task_id, progress=30, message="Parsing document...")
         
-        # Parse articles from doc
+        # Always keep embedded Google Doc images. The UI toggle only controls
+        # whether we fetch cover images from source URLs during rendering.
         items = parse_news_from_doc(doc, extract_images=True)
         
         if not items:
@@ -804,7 +805,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None):
             title_size=22.5,
             body_size=22.5,
             top_n=10,
-            skip_image_fetch=False,
+            skip_image_fetch=not need_images,
             school_name=school_name,
         )
         
@@ -1126,6 +1127,11 @@ def api_gdoc_to_images():
     data = request.json
     doc_url = data.get('doc_url', '').strip()
     school = data.get('school', '').strip().upper() or None
+    need_images = data.get('need_images', True)
+    if isinstance(need_images, str):
+        need_images = need_images.strip().lower() not in ('false', '0', 'no', 'off')
+    else:
+        need_images = bool(need_images)
     
     if not doc_url:
         return jsonify({"error": "Google Doc URL is required"}), 400
@@ -1141,10 +1147,20 @@ def api_gdoc_to_images():
     if school and school not in SCHOOLS:
         return jsonify({"error": f"Invalid school. Choose from: {list(SCHOOLS.keys())}"}), 400
     
-    task_id = create_task("gdoc_to_images", {"doc_id": doc_id[:20] + "...", "school": school, "user": current_user.username})
-    log_user_activity(current_user.id, 'task_create', {'type': 'gdoc_to_images', 'task_id': task_id, 'school': school})
+    task_id = create_task("gdoc_to_images", {
+        "doc_id": doc_id[:20] + "...",
+        "school": school,
+        "need_images": need_images,
+        "user": current_user.username
+    })
+    log_user_activity(current_user.id, 'task_create', {
+        'type': 'gdoc_to_images',
+        'task_id': task_id,
+        'school': school,
+        'need_images': need_images
+    })
     
-    thread = threading.Thread(target=worker_gdoc_to_images, args=(task_id, doc_id, school))
+    thread = threading.Thread(target=worker_gdoc_to_images, args=(task_id, doc_id, school, need_images))
     thread.daemon = True
     thread.start()
     
