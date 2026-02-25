@@ -755,6 +755,11 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, need_im
         # - need_images=True: include embedded doc images and source-url fetching
         # - need_images=False: disable all cover-image collection
         items = parse_news_from_doc(doc, extract_images=need_images)
+        if not need_images:
+            # Hard-disable cover blocks in final renders even if source data
+            # unexpectedly carries image fields.
+            for it in items:
+                it["cover_image"] = ""
         
         if not items:
             update_task(task_id, error="No articles found in document")
