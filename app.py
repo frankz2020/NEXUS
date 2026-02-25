@@ -751,9 +751,10 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, need_im
         doc_title = (doc.get('title') or 'Untitled').strip()
         update_task(task_id, progress=30, message="Parsing document...")
         
-        # Always keep embedded Google Doc images. The UI toggle only controls
-        # whether we fetch cover images from source URLs during rendering.
-        items = parse_news_from_doc(doc, extract_images=True)
+        # Match CLI --no-images semantics:
+        # - need_images=True: include embedded doc images and source-url fetching
+        # - need_images=False: disable all cover-image collection
+        items = parse_news_from_doc(doc, extract_images=need_images)
         
         if not items:
             update_task(task_id, error="No articles found in document")
