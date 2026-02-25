@@ -812,6 +812,7 @@ def worker_gdoc_to_images(task_id: str, doc_id: str, school: str = None, need_im
             body_size=22.5,
             top_n=10,
             skip_image_fetch=not need_images,
+            prefer_source_images=need_images,
             school_name=school_name,
         )
         

@@ -394,6 +394,7 @@ def render_to_images(
     body_size: float,
     top_n: int,
     skip_image_fetch: bool = False,
+    prefer_source_images: bool = False,
     school_name: str = "",
 ) -> List[str]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -420,16 +421,30 @@ def render_to_images(
     def fetch_cover_for_item(idx_item):
         idx, it = idx_item
         cover_image = it.get("cover_image") or ""
-        if not cover_image and not skip_image_fetch:
-            src_url = (it.get("source_url") or "").strip()
-            if src_url:
-                print(f"  [{idx}] Fetching cover from: {src_url[:50]}...")
-                cover_image = fetch_cover_from_source(src_url)
+        if skip_image_fetch:
+            return idx, cover_image
+
+        src_url = (it.get("source_url") or "").strip()
+        if prefer_source_images and src_url:
+            print(f"  [{idx}] Fetching cover from: {src_url[:50]}... (source preferred)")
+            fetched = fetch_cover_from_source(src_url)
+            return idx, (fetched or cover_image)
+
+        if not cover_image and src_url:
+            print(f"  [{idx}] Fetching cover from: {src_url[:50]}...")
+            cover_image = fetch_cover_from_source(src_url)
         return idx, cover_image
     
     cover_images = {}
-    items_needing_fetch = [(i, it) for i, it in enumerate(items, 1) 
-                           if not it.get("cover_image") and not skip_image_fetch]
+    items_needing_fetch = []
+    if not skip_image_fetch:
+        for i, it in enumerate(items, 1):
+            src_url = (it.get("source_url") or "").strip()
+            has_cover = bool(it.get("cover_image"))
+            if prefer_source_images and src_url:
+                items_needing_fetch.append((i, it))
+            elif (not prefer_source_images) and (not has_cover) and src_url:
+                items_needing_fetch.append((i, it))
     
     if items_needing_fetch:
         print(f"  [*] Fetching {len(items_needing_fetch)} cover images in parallel...")
