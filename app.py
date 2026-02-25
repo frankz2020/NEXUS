@@ -1136,7 +1136,8 @@ def api_gdoc_to_images():
     school = data.get('school', '').strip().upper() or None
     need_images = data.get('need_images', True)
     if isinstance(need_images, str):
-        need_images = need_images.strip().lower() not in ('false', '0', 'no', 'off')
+        normalized_need_images = need_images.strip().lower()
+        need_images = bool(normalized_need_images) and normalized_need_images not in ('false', '0', 'no', 'off')
     else:
         need_images = bool(need_images)
     
