@@ -2452,7 +2452,11 @@
             // Remove wechat_images/ prefix and encode the path for URL
             const relativePath = path.replace(/^wechat_images\//, '');
             const encodedPath = relativePath.split('/').map(p => encodeURIComponent(p)).join('/');
-            const previewUrl = `/api/preview/${encodedPath}`;
+            const shouldBustCache = task.type === 'gdoc_to_images';
+            const cacheBust = encodeURIComponent(`${task.id}-${task.created_at || ''}`);
+            const previewUrl = shouldBustCache
+                ? `/api/preview/${encodedPath}?v=${cacheBust}`
+                : `/api/preview/${encodedPath}`;
             const downloadUrl = `/api/download/${encodedPath}`;
             const title = task.result?.title || task.params?.title || filename;
             
@@ -2761,7 +2765,11 @@
             const filename = file.split('/').pop();
             const downloadPath = file.replace(/^wechat_images\//, '');
             const encodedPath = downloadPath.split('/').map(p => encodeURIComponent(p)).join('/');
-            const previewUrl = `/api/preview/${encodedPath}`;
+            const shouldBustCache = task.type === 'gdoc_to_images';
+            const cacheBust = encodeURIComponent(`${task.id}-${task.created_at || ''}`);
+            const previewUrl = shouldBustCache
+                ? `/api/preview/${encodedPath}?v=${cacheBust}`
+                : `/api/preview/${encodedPath}`;
             const downloadUrl = `/api/download/${encodedPath}`;
             const title = `${index + 1}/${files.length}: ${filename}`;
             
