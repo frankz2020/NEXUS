@@ -1202,7 +1202,12 @@ def api_preview_file(filepath):
     logger.info(f"Preview request: filepath={filepath}, decoded={decoded_path}, safe_path={safe_path}, exists={safe_path.exists()}")
     if not safe_path.exists():
         return jsonify({"error": f"File not found: {safe_path}"}), 404
-    return send_file(safe_path, mimetype='image/png')
+    response = send_file(safe_path, mimetype='image/png')
+    # Disable browser/proxy caching so repeated renders always show latest image.
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route('/api/download-folder/<path:folderpath>')
 @login_required
