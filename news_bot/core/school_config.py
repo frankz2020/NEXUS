@@ -23,11 +23,14 @@ SCHOOL_PROFILES = {
     "id": 2,
     "school_name": "Emory University",
     "school_location": "Atlanta",
-    "domains": ["news.emory.edu", "www.emorywheel.com"],
+    "domains": ["news.emory.edu", "www.emorywheel.com", "www.atlantamagazine.com", "atlantamagazine.com"],
     "category_pages": [
       # Monthly and root index are handled by emory_crawler; keep for completeness
       "https://news.emory.edu/stories/index.html",
-      "https://www.emorywheel.com/section/news"
+      "https://www.emorywheel.com/section/news",
+    ],
+    "external_category_pages": [
+      "https://www.atlantamagazine.com/newsculture-articles/",
     ],
     "archive_patterns": [
       # Emory monthly index pages
@@ -40,7 +43,7 @@ SCHOOL_PROFILES = {
       r"_(\d{2})-(\d{2})-(\d{4})/story\.html$"
     ],
     "selectors": {},
-    "pse_sites": ["news.emory.edu", "emorywheel.com"],
+    "pse_sites": ["news.emory.edu", "emorywheel.com", "atlantamagazine.com"],
     "prompt_context": {
       "audience_en": "Chinese international students at Emory University",
       "audience_zh": "埃默里大学的中国留学生",
@@ -51,15 +54,21 @@ SCHOOL_PROFILES = {
     "id": 3,
     "school_name": "University of California, Davis",
     "school_location": "Davis",
-    "domains": ["www.ucdavis.edu", "theaggie.org"],
-    "category_pages": ["https://www.ucdavis.edu/news/latest"],
+    "domains": ["www.ucdavis.edu", "ucdavis.edu", "leadership.ucdavis.edu", "theaggie.org"],
+    "category_pages": [
+      "https://www.ucdavis.edu/news/latest",
+    ],
+    "external_category_pages": [
+      "https://theaggie.org",
+      "https://leadership.ucdavis.edu/news",
+    ],
     "archive_patterns": [
       # USC monthly index pages
       "https://news.emory.edu/stories/{year}/{month:02d}/",
     ],
     "validators": [r"/\d{4}/\d{2}/\d{2}/", r"/news/"],
     "selectors": {},
-    "pse_sites": ["ucdavis.edu", "theaggie.org"],
+    "pse_sites": ["ucdavis.edu", "leadership.ucdavis.edu", "theaggie.org"],
     "prompt_context": {
       "audience_en": "Chinese international students at UC Davis",
       "audience_zh": "加州大学戴维斯分校的中国留学生",
@@ -110,14 +119,41 @@ SCHOOL_PROFILES = {
     "id": 6,
     "school_name": "University of Edinburgh",
     "school_location": "Edinburgh",
-    "domains": ["www.ed.ac.uk", "www.ed.ac.uk/news"],
-    "category_pages": ["https://www.ed.ac.uk/news/latest?search_api_news_fulltext=&field_news_publication_date%5Bmin%5D={start_year}-{start_month:02d}-{start_day:02d}&field_news_publication_date%5Bmax%5D={end_year}-{end_month:02d}-{end_day:02d}",
-                       "https://thestudentnews.co.uk/category/news/"],
+    "domains": [
+      "www.ed.ac.uk",
+      "ed.ac.uk",
+      "www.edinburghlive.co.uk",
+      "thetab.com",
+      "www.expressandstar.com",
+      "www.midlothianview.com",
+      "projectscot.com",
+      "oikotimene.org",
+    ],
+    "category_pages": [
+      "https://www.ed.ac.uk/news/latest?search_api_news_fulltext=&field_news_publication_date%5Bmin%5D={start_year}-{start_month:02d}-{start_day:02d}&field_news_publication_date%5Bmax%5D={end_year}-{end_month:02d}-{end_day:02d}",
+      "https://thestudentnews.co.uk/category/news/",
+    ],
+    "external_category_pages": [
+      "https://www.edinburghlive.co.uk/news/edinburgh-news/",
+      "https://thetab.com/uk/edinburgh",
+      "https://www.expressandstar.com/uk-news/",
+      "https://www.midlothianview.com/news/",
+      "https://projectscot.com",
+      "https://oikotimene.org/news/",
+    ],
     "archive_patterns": [
       ],
     "validators": [r"/\d{4}/\d{2}/\d{2}/", r"/news/"],
     "selectors": {},
-    "pse_sites": ["ed.ac.uk"],
+    "pse_sites": [
+      "ed.ac.uk",
+      "edinburghlive.co.uk",
+      "thetab.com",
+      "expressandstar.com",
+      "midlothianview.com",
+      "projectscot.com",
+      "oikotimene.org",
+    ],
     "prompt_context": {
       "audience_en": "Chinese international students at Edinburgh",
       "audience_zh": "爱丁堡大学的中国留学生",

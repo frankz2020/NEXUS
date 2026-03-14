@@ -20,6 +20,36 @@ def _month_iter(start_date: date, end_date: date):
             y += 1
 
 
+def emory_collect_generic_candidate_links(soup: BeautifulSoup, current_page_url: str) -> dict:
+    candidate_links = {}
+
+    for link_tag in soup.find_all('a', href=True):
+        href = (link_tag.get('href') or '').strip()
+        if not href:
+            continue
+
+        abs_url = urljoin(current_page_url, href)
+        if not abs_url.startswith("http"):
+            continue
+
+        if not any(domain in abs_url for domain in school.get('domains', [])):
+            continue
+
+        if any(skip in abs_url.lower() for skip in ["/tag/", "/author/", "/page/", "/category/", "javascript:", "mailto:", "#"]):
+            continue
+
+        if not (
+            re.search(r'/\d{4}/\d{2}/\d{2}/', abs_url) or
+            "/news/" in abs_url or
+            "/newsculture-articles/" in abs_url
+        ):
+            continue
+
+        candidate_links[link_tag] = extract_date_from_url(abs_url)
+
+    return candidate_links
+
+
 def emory_scan_wheel_pages_for_date_range() -> list[dict]:
     start_date, end_date = config.get_news_date_range()
     print(f"\n--- Scanning Archive Pages for {start_date} to {end_date} ---")
@@ -170,8 +200,77 @@ def emory_scan_edu_pages_for_date_range() -> list[dict]:
     return found_articles
 
 
+def emory_scan_external_source_pages_for_date_range() -> list[dict]:
+    start_date, end_date = config.get_news_date_range()
+    print(f"\n--- Scanning Emory external source pages for {start_date} to {end_date} ---")
+
+    found_articles: list[dict] = []
+    processed_urls: set[str] = set()
+    external_pages = school.get('external_category_pages', [])
+
+    if not external_pages:
+        print("  Info: No Emory external source pages configured.")
+        return []
+
+    for page_url in external_pages:
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            resp = requests.get(page_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
+            if resp.status_code == 404:
+                print(f"  External source page not found: {page_url}")
+                continue
+
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.content, 'html.parser')
+            candidate_links = emory_collect_generic_candidate_links(soup, page_url)
+
+            if not candidate_links:
+                print(f"  Info: No candidate article links found on external source page: {page_url}")
+                continue
+
+            for link_tag, url_date in candidate_links.items():
+                href = link_tag.get('href')
+                abs_url = urljoin(page_url, href)
+                if abs_url in processed_urls:
+                    continue
+
+                title = link_tag.get_text(strip=True) or link_tag.get('title') or 'Untitled'
+                if not title:
+                    continue
+
+                if url_date is None:
+                    continue
+
+                try:
+                    article_date = datetime.strptime(url_date, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+
+                if article_date < start_date or article_date > end_date:
+                    continue
+
+                found_articles.append({
+                    'title': title,
+                    'url': abs_url,
+                    'snippet': title,
+                    'url_date': url_date
+                })
+                processed_urls.add(abs_url)
+
+        except requests.exceptions.RequestException as e:
+            print(f"  Error accessing Emory external source page {page_url}: {e}")
+        except Exception as e:
+            print(f"  Error processing Emory external source page {page_url}: {e}")
+
+    print(f"Emory external source pages yielded {len(found_articles)} articles in range")
+    return found_articles
+
+
 
 def emory_scan_archive_pages_for_date_range() -> list[dict]:
     edu_articles = emory_scan_edu_pages_for_date_range()
     wheel_articles = emory_scan_wheel_pages_for_date_range()
-    return edu_articles + wheel_articles
+    external_articles = emory_scan_external_source_pages_for_date_range()
+    return edu_articles + wheel_articles + external_articles
