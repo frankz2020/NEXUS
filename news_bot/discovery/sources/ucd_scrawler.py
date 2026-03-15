@@ -16,6 +16,8 @@ def build_ucd_page_url(page_url: str, page_num: int) -> str:
     if page_num == 0:
         return page_url
     if "www.ucdavis.edu/news/latest" in page_url:
+        if "?" in page_url:
+            return f"{page_url}&page={page_num}"
         return f"{page_url}/?page={page_num}"
     if "theaggie.org" in page_url:
         base = page_url.rstrip("/") + "/"
@@ -229,8 +231,6 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
             continue
 
         for page_url in page_urls:
-            if "leadership.ucdavis.edu/news" in page_url:
-                continue
             # Try to scan multiple pages if the site supports pagination
             max_pages = config.MAX_CATEGORY_PAGES_TO_SCAN  # Use config value
             for page_num in range(max_pages + 1):
@@ -267,7 +267,12 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
                                     time_tag = body.find('time')
                                     url_date = None
                                     if time_tag and time_tag.get('datetime'):
-                                        url_date = datetime.fromisoformat(time_tag.get('datetime').replace('Z', '+00:00')).date().strftime('%Y-%m-%d')
+                                        try:
+                                            url_date = datetime.fromisoformat(
+                                                time_tag.get('datetime').replace('Z', '+00:00')
+                                            ).date().strftime('%Y-%m-%d')
+                                        except ValueError:
+                                            url_date = None
                                     if not url_date:
                                         url_date = extract_date_from_url(urljoin(current_page_url, href))
                                     candidate_links[link_tag] = url_date
@@ -332,7 +337,9 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
                                     processed_urls.add(absolute_url)
                                     articles_found_on_page += 1
                             except ValueError:
-                                pass  # If date parsing fails, include the article anyway
+                                found_articles.append({"title": title, "url": absolute_url, "snippet": title, "url_date": None})
+                                processed_urls.add(absolute_url)
+                                articles_found_on_page += 1
                         else:
                             # No date in URL - skip for historical searches unless it's a special case
                             if config.NEWS_START_DATE:  # If we're doing a historical search
@@ -359,7 +366,7 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
                         
                 except requests.exceptions.RequestException as e_req:
                     print(f"Error fetching category page {current_page_url}: {e_req}")
-                    if page_num == 1:
+                    if page_num == 0:
                         break  # If first page fails, don't try pagination
                 except Exception as e_general:
                     print(f"Error processing category page {current_page_url}: {e_general}")

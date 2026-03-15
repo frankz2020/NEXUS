@@ -63,8 +63,7 @@ SCHOOL_PROFILES = {
       "https://leadership.ucdavis.edu/news",
     ],
     "archive_patterns": [
-      # USC monthly index pages
-      "https://news.emory.edu/stories/{year}/{month:02d}/",
+      # No stable monthly archive patterns are configured for UC Davis.
     ],
     "validators": [r"/\d{4}/\d{2}/\d{2}/", r"/news/"],
     "selectors": {},
@@ -119,41 +118,14 @@ SCHOOL_PROFILES = {
     "id": 6,
     "school_name": "University of Edinburgh",
     "school_location": "Edinburgh",
-    "domains": [
-      "www.ed.ac.uk",
-      "ed.ac.uk",
-      "www.edinburghlive.co.uk",
-      "thetab.com",
-      "www.expressandstar.com",
-      "www.midlothianview.com",
-      "projectscot.com",
-      "oikotimene.org",
-    ],
-    "category_pages": [
-      "https://www.ed.ac.uk/news/latest?search_api_news_fulltext=&field_news_publication_date%5Bmin%5D={start_year}-{start_month:02d}-{start_day:02d}&field_news_publication_date%5Bmax%5D={end_year}-{end_month:02d}-{end_day:02d}",
-      "https://thestudentnews.co.uk/category/news/",
-    ],
-    "external_category_pages": [
-      "https://www.edinburghlive.co.uk/news/edinburgh-news/",
-      "https://thetab.com/uk/edinburgh",
-      "https://www.expressandstar.com/uk-news/",
-      "https://www.midlothianview.com/news/",
-      "https://projectscot.com",
-      "https://oikotimene.org/news/",
-    ],
+    "domains": ["www.ed.ac.uk", "www.ed.ac.uk/news"],
+    "category_pages": ["https://www.ed.ac.uk/news/latest?search_api_news_fulltext=&field_news_publication_date%5Bmin%5D={start_year}-{start_month:02d}-{start_day:02d}&field_news_publication_date%5Bmax%5D={end_year}-{end_month:02d}-{end_day:02d}",
+                       "https://thestudentnews.co.uk/category/news/"],
     "archive_patterns": [
       ],
     "validators": [r"/\d{4}/\d{2}/\d{2}/", r"/news/"],
     "selectors": {},
-    "pse_sites": [
-      "ed.ac.uk",
-      "edinburghlive.co.uk",
-      "thetab.com",
-      "expressandstar.com",
-      "midlothianview.com",
-      "projectscot.com",
-      "oikotimene.org",
-    ],
+    "pse_sites": ["ed.ac.uk"],
     "prompt_context": {
       "audience_en": "Chinese international students at Edinburgh",
       "audience_zh": "爱丁堡大学的中国留学生",
