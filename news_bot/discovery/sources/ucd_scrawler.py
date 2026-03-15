@@ -6,8 +6,10 @@ from ...core import config, school_config
 from ...discovery.date_extractor import extract_date_from_url
 import requests # For fetching category pages
 from bs4 import BeautifulSoup # For parsing category pages
-from urllib.parse import urljoin # For resolving relative URLs
+from urllib.parse import urljoin, urlparse # For resolving relative URLs
 import re # For regular expressions
+import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
 
 
 def build_ucd_page_url(page_url: str, page_num: int) -> str:
@@ -20,6 +22,18 @@ def build_ucd_page_url(page_url: str, page_num: int) -> str:
         return f"{base}page/{page_num}/"
     separator = "&" if "?" in page_url else "?"
     return f"{page_url}{separator}page={page_num}"
+
+
+def is_allowed_domain(article_url: str, school: dict) -> bool:
+    hostname = (urlparse(article_url).hostname or '').lower()
+    if not hostname:
+        return False
+
+    for domain in school.get('domains', []):
+        normalized = domain.lower().strip()
+        if hostname == normalized or hostname.endswith(f".{normalized}"):
+            return True
+    return False
 
 
 def collect_generic_candidate_links(soup: BeautifulSoup, current_page_url: str) -> dict:
@@ -36,7 +50,7 @@ def collect_generic_candidate_links(soup: BeautifulSoup, current_page_url: str) 
         if not absolute_url.startswith("http"):
             continue
 
-        if not any(domain in absolute_url for domain in school.get('domains', [])):
+        if not is_allowed_domain(absolute_url, school):
             continue
 
         if any(skip in absolute_url.lower() for skip in skip_patterns):
@@ -52,6 +66,63 @@ def collect_generic_candidate_links(soup: BeautifulSoup, current_page_url: str) 
         candidate_links[link_tag] = extract_date_from_url(absolute_url)
 
     return candidate_links
+
+
+def parse_rss_date(raw_value: str | None) -> str | None:
+    if not raw_value:
+        return None
+
+    try:
+        return parsedate_to_datetime(raw_value).date().strftime('%Y-%m-%d')
+    except Exception:
+        return None
+
+
+def ucd_scan_leadership_rss_for_links() -> list[dict[str, str | None]]:
+    start_date, end_date = config.get_news_date_range()
+    rss_url = "https://leadership.ucdavis.edu/news.rss"
+    print(f"\n--- Scanning UC Davis leadership RSS for {start_date} to {end_date} ---")
+
+    found_articles = []
+    processed_urls = set()
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+        }
+        response = requests.get(rss_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+
+        for item in root.findall('.//item'):
+            title = (item.findtext('title') or '').strip()
+            link = (item.findtext('link') or '').strip()
+            if not link or link in processed_urls:
+                continue
+
+            url_date = parse_rss_date(item.findtext('pubDate')) or extract_date_from_url(link)
+            if url_date:
+                try:
+                    article_date = datetime.strptime(url_date, "%Y-%m-%d").date()
+                    if article_date < start_date or article_date > end_date:
+                        continue
+                except ValueError:
+                    continue
+            elif config.NEWS_START_DATE:
+                continue
+
+            found_articles.append({
+                "title": title or link,
+                "url": link,
+                "snippet": title or link,
+                "url_date": url_date,
+            })
+            processed_urls.add(link)
+    except Exception as e:
+        print(f"Error fetching UC Davis leadership RSS {rss_url}: {e}")
+
+    return found_articles
 
 
 def ucd_enterprise_news_pages_for_links() -> list[dict]:
@@ -140,6 +211,9 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
     found_articles = []
     processed_urls = set()
     school = school_config.SCHOOL_PROFILES['ucd']
+    leadership_articles = ucd_scan_leadership_rss_for_links()
+    found_articles.extend(leadership_articles)
+    processed_urls.update(article["url"] for article in leadership_articles)
     configured_page_groups = [
         ("category", school.get('category_pages', [])),
         ("external", school.get('external_category_pages', [])),
@@ -155,6 +229,8 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
             continue
 
         for page_url in page_urls:
+            if "leadership.ucdavis.edu/news" in page_url:
+                continue
             # Try to scan multiple pages if the site supports pagination
             max_pages = config.MAX_CATEGORY_PAGES_TO_SCAN  # Use config value
             for page_num in range(max_pages + 1):
@@ -223,7 +299,7 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
                             continue
 
                         # Validate URL structure and domain
-                        if not absolute_url.startswith("http") or not any(domain in absolute_url for domain in school.get('domains')):
+                        if not absolute_url.startswith("http") or not is_allowed_domain(absolute_url, school):
                             filtered_count["wrong_domain"] += 1
                             continue
 
