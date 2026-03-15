@@ -47,6 +47,7 @@ def build_emory_external_page_variants(page_url: str, page_num: int) -> list[str
     variants = [
         f"{page_url}{separator}page={page_num}",
         f"{page_url}{separator}pageNumber={page_num}",
+        f"{base}/page/{page_num}/",
         f"{page_url}{separator}page={page_num + 1}",
         f"{page_url}{separator}pageNumber={page_num + 1}",
         f"{base}/page/{page_num + 1}/",
