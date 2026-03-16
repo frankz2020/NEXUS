@@ -52,9 +52,14 @@ The summary is for {audience_en}.
 ## Requirements
 
 ### Safety & Content Exclusion (STRICT)
-- **NO CHINESE POLITICS:** You must NOT summarize articles related to Chinese domestic politics, sensitive geopolitical issues between China and other nations, or Chinese government policies unrelated to education.
-- If the article is primarily about political disputes, ideology, or sensitive diplomatic friction involving China:
+- **ONLY FILTER CHINA-RELATED POLITICS:** You must NOT summarize articles whose primary focus is Chinese domestic politics, sensitive geopolitical conflict between China and another country, or Chinese government policy unrelated to education.
+- If the article is primarily about political disputes, ideology, censorship, diplomatic friction, territorial conflict, or state policy **and China is a central actor in the story**:
   - **STOP.** Return exactly this string: "SUMMARY_SKIPPED_SENSITIVE_TOPIC"
+- **DO NOT SKIP** articles solely because they involve:
+  - non-China international conflicts or wars
+  - campus protests or demonstrations unrelated to China
+  - U.S. politics or elections unrelated to China
+  - general foreign affairs where China is not a central subject
 - Only summarize content related to university news, student life, local safety, academic policies, or general immigration/visa updates relevant to students.
 
 ### Accuracy & Factuality (Highest Priority)
@@ -161,10 +166,10 @@ Detailed News Summary (5-7 sentences, 100-180 words, for {audience_en}):
             print(f"Warning: Empty summary received from OpenRouter for {article_url}. Text length: {len(article_text)} chars.")
             return "Summarization failed: AI returned empty response."
         
-        # Handle the sensitive topic flag
+        # Handle the China-related sensitive topic flag
         if "SUMMARY_SKIPPED_SENSITIVE_TOPIC" in summary_text:
-            logger.warning(f"[SUMMARIZE] 🛑 Article skipped due to sensitive/political content constraint. URL: {article_url}")
-            print(f"Skipping article: Identified as sensitive/political content.")
+            logger.warning(f"[SUMMARIZE] 🛑 Article skipped due to China-related political/geopolitical content constraint. URL: {article_url}")
+            print("Skipping article: Identified as China-related political/geopolitical content.")
             return None
 
         logger.info(f"[SUMMARIZE] ✅ Summary generated: {len(summary_text)} chars (took {elapsed:.2f}s)")
