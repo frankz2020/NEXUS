@@ -30,8 +30,9 @@ OPENROUTER_API_KEY="sk-or-v1-your_actual_openrouter_api_key_here"
 
 **Optional:** You can also configure model names (defaults are already set):
 ```env
-GEMINI_FLASH_MODEL="google/gemini-2.5-flash"
-GEMINI_PRO_MODEL="google/gemini-2.5-pro"
+GEMINI_FLASH_MODEL="gpt-5.4"
+GEMINI_SUMMARY_MODEL="gpt-5.4"
+GEMINI_PRO_MODEL="gpt-5.4"
 ```
 
 ### 4. Optional: Google Docs Export (credentials.json)
