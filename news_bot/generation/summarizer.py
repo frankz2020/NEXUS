@@ -51,8 +51,12 @@ The summary is for {audience_en}.
 
 ## Requirements
 
-### Topic Scope
-- Summarize content related to university news, student life, local safety, academic policies, or general immigration/visa updates relevant to students.
+### Safety & Content Exclusion (STRICT)
+- **NO CHINA-RELATED SENSITIVE POLITICS:** You must NOT summarize articles primarily about Chinese domestic politics, Chinese party ideology, sensitive geopolitical conflict involving China, or Chinese government policy unrelated to education, student life, visas, immigration, or campus operations.
+- Only return "SUMMARY_SKIPPED_SENSITIVE_TOPIC" when the article is primarily about one of those China-related sensitive political topics.
+- Do NOT skip ordinary university or local public-interest reporting merely because it mentions conflict, protest, labor action, controversy, or funding disputes.
+- In particular, articles about university strikes, campus protests, budget cuts, union disputes, education funding, administrative controversy, lawsuits, crime, or local civic issues should still be summarized if they are standard news reporting and not primarily about China-related sensitive politics.
+- Only summarize content related to university news, student life, local safety, academic policies, or general immigration/visa updates relevant to students.
 
 ### Accuracy & Factuality (Highest Priority)
 - Include ONLY information explicitly stated in the article text
@@ -158,6 +162,12 @@ Detailed News Summary (5-7 sentences, 100-180 words, for {audience_en}):
             print(f"Warning: Empty summary received from OpenRouter for {article_url}. Text length: {len(article_text)} chars.")
             return "Summarization failed: AI returned empty response."
         
+        # Handle the sensitive topic flag
+        if "SUMMARY_SKIPPED_SENSITIVE_TOPIC" in summary_text:
+            logger.warning(f"[SUMMARIZE] 🛑 Article skipped due to sensitive/political content constraint. URL: {article_url}")
+            print(f"Skipping article: Identified as sensitive/political content.")
+            return None
+
         logger.info(f"[SUMMARIZE] ✅ Summary generated: {len(summary_text)} chars (took {elapsed:.2f}s)")
         logger.debug(f"[SUMMARIZE] Summary preview: {summary_text[:150]}...")
         print(f"Successfully generated English summary for {article_url[:100]}...")

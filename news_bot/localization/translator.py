@@ -65,6 +65,12 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 
 ## 要求
 
+### 内容安全警告 (Strict)
+- **仅跳过中国相关敏感政治内容：** 如果源文本主要讨论中国国内政治、中国党派意识形态、涉及中国的敏感地缘政治冲突，或与教育、学生生活、签证、移民、校园运营无关的中国政府政策，请不要翻译。直接回复 "SKIP: POLITICAL CONTENT"。
+- 只有在文章主题主要属于上述中国相关敏感政治议题时，才可以回复 "SKIP: POLITICAL CONTENT"。
+- 不要因为文章提到冲突、抗议、罢工、预算削减、工会纠纷、行政争议、诉讼、治安事件或地方公共事务，就将其判定为需要跳过的政治敏感内容。
+- 对于高校罢工、校园抗议、教育经费争议、大学管理层争议、地方政策变化等常规新闻报道，只要不主要涉及上述中国相关敏感政治议题，都应正常翻译。
+
 ### 准确性与事实性（最高优先级）
 - 仅翻译英文摘要中明确陈述的信息 - 不要添加、推断或猜测
 - 保留所有事实细节：日期、姓名、数字、地点、组织
@@ -322,6 +328,11 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
         elapsed = time.time() - start_time
         
         if full_response_text:
+            # Handle political skip flag
+            if "SKIP: POLITICAL CONTENT" in full_response_text:
+                logger.warning(f"[TRANSLATE] 🛑 Content skipped during translation (Political). URL: {source_url}")
+                return None
+
             logger.info(f"[TRANSLATE] Response received: {len(full_response_text)} chars (took {elapsed:.2f}s)")
             logger.debug(f"[TRANSLATE] Response preview: {full_response_text[:200]}...")
             
