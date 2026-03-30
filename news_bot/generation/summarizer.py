@@ -26,13 +26,12 @@ def generate_summary_with_gemini(school: dict[str, str], article_text: str, arti
         print(f"Info: Skipping summarization for {article_url} due to empty article text.")
         return "Summarization skipped: Article text was empty."
 
-    logger.info(f"[SUMMARIZE] Using model: {config.GEMINI_PRO_MODEL}")
-    print(f"Generating English summary with OpenRouter ({config.GEMINI_PRO_MODEL}) for: {article_url[:100]}...")
+    logger.info(f"[SUMMARIZE] Using model: {config.OPENROUTER_MODEL}")
+    print(f"Generating English summary with OpenRouter ({config.OPENROUTER_MODEL}) for: {article_url[:100]}...")
 
     title_context = f"The original article title is: '{article_title}'. " if article_title and article_title != "N/A" else ""
 
-    # Use Pro model's larger context limit
-    context_char_limit = getattr(config, 'GEMINI_PRO_MODEL_CONTEXT_LIMIT_CHARS', 2000000)
+    context_char_limit = getattr(config, 'OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS', 2000000)
     article_text_limit = min(len(article_text), context_char_limit // 2)  # Use half for safety
 
     # Get school-specific context from the school profile
@@ -134,7 +133,7 @@ Detailed News Summary (5-7 sentences, 100-180 words, for {audience_en}):
 
     try:
         logger.info(f"[SUMMARIZE] Sending request to OpenRouter API...")
-        print(f"Sending summarization request to OpenRouter API ({config.GEMINI_PRO_MODEL})...")
+        print(f"Sending summarization request to OpenRouter API ({config.OPENROUTER_MODEL})...")
         
         # Log the prompt
         prompt_logger.log_prompt(
@@ -151,7 +150,7 @@ Detailed News Summary (5-7 sentences, 100-180 words, for {audience_en}):
         start_time = time.time()
         summary_text = openrouter_client.generate_content(
             prompt=prompt,
-            model=config.GEMINI_PRO_MODEL,
+            model=config.OPENROUTER_MODEL,
             temperature=0.7
         )
         elapsed = time.time() - start_time
@@ -189,11 +188,8 @@ if __name__ == '__main__':
     
     from news_bot.core import config
     config.validate_config()
-    # Add placeholders for context limits if not in config for testing
-    if not hasattr(config, 'GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS'):
-        config.GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS = 100000 
-    if not hasattr(config, 'GEMINI_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS'):
-        config.GEMINI_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS = 100000
+    if not hasattr(config, 'OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS'):
+        config.OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS = 2000000
 
     sample_article_text = ("""
     New York University today announced a new initiative to support international students 

@@ -21,7 +21,7 @@ Original Email Body:
     try:
         sanitized_email_body = openrouter_client.generate_content(
             prompt=prompt,
-            model=config.GEMINI_FLASH_MODEL,
+            model=config.OPENROUTER_MODEL,
             temperature=0.3
         )
         return sanitized_email_body

@@ -52,7 +52,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
             "refined_chinese_news_report": "翻译跳过：英文摘要为空 (Translation skipped: English summary was empty)"
         }
 
-    logger.info(f"[TRANSLATE] Using model: {config.GEMINI_PRO_MODEL}")
+    logger.info(f"[TRANSLATE] Using model: {config.OPENROUTER_MODEL}")
     print(f"Translating, generating title, and refining Chinese news report for: {source_url[:100]}...")
 
     prompt = f"""你是一位专业的中文新闻写作者和翻译。你的任务是将英文新闻摘要翻译成一篇准确、客观、精炼的中文新闻，并生成一个吸引人的标题。
@@ -190,15 +190,45 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
   2. 严禁随意猜测年份。若原文未提及且逻辑无法推断，默认视为 {publication_date} 所在的年份。
   3. 如果文中提到的数字（如“离校园11英里”）与日期混淆，请仔细甄别，不要把距离单位当成日期。
 
-### 信息合并与人名去重
-**“一现”原则（Hard Limit）：** 在同一个自然段内，同一个人的名字（尤其是冗长的英文名，如 Berlin, Loganathan Palanikumar）**最多只能作为主语出现一次**！
-- **强制代词替换：** 第二次及以后提到该人时，**绝对禁止**再次重复其全名或姓氏，**必须**使用代词“他”或“她”，或者直接合并句子。
-- **纠错案例（必须严格模仿）：**
-  - ❌ 错误：Berlin目前担任主教。作为校友，Berlin曾在神学院任职。Berlin的履历十分资深。
-  - ✅ 正确：Berlin目前担任主教。作为校友，**他**曾在神学院任职。**他**的履历十分资深。
-  - ❌ 错误：Smith指出该项目很危险。Smith表示：“我们必须停止。”
-  - ✅ 正确：Smith指出该项目很危险，**并补充道**：“我们必须停止。” (合并主语)
-- **逻辑归属准确：** 绝对不要将“群体的普遍观点”强加给“某一个人”作为直接引语（如：不能写 一位学生表示：“受访学生均强调…”）。群体观点用群体主语，个人观点用个人主语。
+### 人名去重与句子合并
+
+#### 1. 显式姓名出现次数限制
+- 在同一段落中，同一人物的姓名（包括全名、职位、缩写等）只能出现一次。
+- 如果同一人物的名字在相邻句子中重复出现，必须使用代词（如“他”或“她”）替换，或者合并句子。
+- 例如： 
+  - 错误：Stacy Loeb指出……Stacy Loeb还表示……
+  - 正确：Stacy Loeb指出……，**她**还表示……
+
+#### 2. 同一说话人双动词必须合并
+- 如果同一人物在相邻两句中连续承担“表示、指出、提到、补充、强调、认为、说道”等引述动作，必须优先合并为一句。
+- 推荐格式：
+  - X指出……，并强调……
+  - X表示：“……”，并补充说：“……”
+  - X提到……，同时认为……
+- 禁止写法：
+  - X指出……
+  - X又表示……
+  - X还强调……
+  （若三句中的主语都是同一人，必须合并或改代词）
+
+#### 3. 引语保留时的去重
+- 若原文包含同一人物的多段直接引语，可以保留直接引语，但该人物姓名在该段中仍只能出现一次。
+- 正确示例：
+  - Dan表示：“……”，并补充说：“……”
+  - DM指出：“……”，同时强调：“……”
+- 错误示例：
+  - Dan表示：“……”。Dan又说：“……”
+  - DM指出：“……”。DM强调：“……”
+
+#### 4. 段落级自检
+- 输出正文前，逐段检查：
+  1) 是否有同一人物姓名重复出现两次及以上；
+  2) 是否有同一人物在相邻句中重复充当引述主语；
+  3) 若有，必须先改写，再输出最终结果。
+
+#### 5. 去重优先级高于字面保留
+- 在不改变事实、不改变引语归属、不改变语气强度的前提下，优先执行“合并句子”和“代词替换”。
+- 即使原文连续两句都以同一人物开头，中文也必须改写为更自然的合并表达。
 
 ### 风格与精炼要求
 1. 使用严肃、正式、客观的新闻写作风格，但是不要写得很生硬，要自然，不要有AI味。读者是留学生。
@@ -233,6 +263,10 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
      - (正确) Jacob Remes 表示：“我们并不想罢工。”
      - (错误 - 变成了间接引语) Jacob Remes 表示他们并不想罢工。
      - (错误 - 用了英文标点) Jacob Remes 表示:"我们并不想罢工."
+10. 如果英文原文包含长句，应按中文习惯拆分为简短的句子，避免英文从句结构直接转译。
+- 例如：
+  - 错误：研究人员表示，微塑料的暴露在健康方面可能有害，虽然因果关系尚未确立，但影响可能是显著的。
+  - 正确：研究人员表示，微塑料暴露可能对健康有害。虽然因果关系尚未确立，但其影响可能显著。
 
 ### 结构与格式要求
 1. 每个关键事实点必须包含至少2句话：
@@ -268,7 +302,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 
     try:
         logger.info("[TRANSLATE] Sending request to OpenRouter API...")
-        print(f"Sending translation+refinement request to OpenRouter API ({config.GEMINI_PRO_MODEL})...")
+        print(f"Sending translation+refinement request to OpenRouter API ({config.OPENROUTER_MODEL})...")
         
         # Log the prompt
         prompt_logger.log_prompt(
@@ -285,7 +319,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
         start_time = time.time()
         full_response_text = openrouter_client.generate_content(
             prompt=prompt,
-            model=config.GEMINI_PRO_MODEL,
+            model=config.OPENROUTER_MODEL,
             temperature=0.7
         )
         elapsed = time.time() - start_time
@@ -389,8 +423,8 @@ if __name__ == '__main__':
     
     from news_bot.core import config 
     config.validate_config()
-    if not hasattr(config, 'GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS'):
-        config.GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS = 100000
+    if not hasattr(config, 'OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS'):
+        config.OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS = 2000000
 
     sample_english_data = {
         "summary": "NYU announced a new visa support initiative. This helps international students, especially those from China, facing visa delays. President Linda G. Mills stated NYU is committed. Workshops and extended advising are included. Hundreds will benefit next academic year.",

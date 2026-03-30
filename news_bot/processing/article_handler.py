@@ -267,10 +267,10 @@ def verify_article_with_gemini(school: dict[str, str], article_text: str, articl
             "article_type_assessment": "Type unclear (no text)"
         }
 
-    print(f"Verifying article with OpenRouter ({config.GEMINI_PRO_MODEL}): {article_url[:100]}...")
+    print(f"Verifying article with OpenRouter ({config.OPENROUTER_MODEL}): {article_url[:100]}...")
     print(f"Using date range: {start_date} to {end_date}")
 
-    context_limit = getattr(config, 'GEMINI_PRO_MODEL_CONTEXT_LIMIT_CHARS', 2000000)
+    context_limit = getattr(config, 'OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS', 2000000)
     article_text_limit = min(len(article_text), context_limit // 2)  # Use half for safety
     
     prompt = f"""You are a news article analyst. Your task is to extract key metadata from the article text.
@@ -300,7 +300,7 @@ Your response (exactly 3 lines as specified above):
 
     gemini_publication_date_str = "Date not found" # Default from OpenRouter
     try:
-        print(f"Sending verification request to OpenRouter API ({config.GEMINI_PRO_MODEL})...")
+        print(f"Sending verification request to OpenRouter API ({config.OPENROUTER_MODEL})...")
         
         # Log the prompt
         prompt_logger.log_prompt(
@@ -316,7 +316,7 @@ Your response (exactly 3 lines as specified above):
         
         raw_response_text = openrouter_client.generate_content(
             prompt=prompt,
-            model=config.GEMINI_PRO_MODEL,
+            model=config.OPENROUTER_MODEL,
             temperature=0.3
         )
 
@@ -414,10 +414,9 @@ if __name__ == '__main__':
     
     from news_bot.core import config
     config.validate_config()
-    # Add a placeholder for GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS if not in config for testing
-    if not hasattr(config, 'GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS'):
-        print("Warning: GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS not in config, defaulting to 100000 for test.")
-        config.GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS = 100000 
+    if not hasattr(config, 'OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS'):
+        print("Warning: OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS not in config, defaulting to 2000000 for test.")
+        config.OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS = 2000000
 
     # Test URL with date in it
     test_url_wsn_with_date = "https://nyunews.com/news/2024/05/16/gallatin-student-speaker-diploma-withheld/"

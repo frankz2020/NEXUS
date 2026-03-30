@@ -15,7 +15,7 @@ def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -
     
     Args:
         prompt: The prompt text to send to the model
-        model: Model name (defaults to GEMINI_PRO_MODEL from config)
+        model: Model name (defaults to OPENROUTER_MODEL from config)
         temperature: Temperature for generation (default 0.7)
     
     Returns:
@@ -27,7 +27,7 @@ def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -
         return None
     
     if model is None:
-        model = config.GEMINI_PRO_MODEL
+        model = config.OPENROUTER_MODEL
     
     logger.info(f"[OPENROUTER] Generating content with model: {model}")
     logger.debug(f"[OPENROUTER] Prompt length: {len(prompt)} chars")

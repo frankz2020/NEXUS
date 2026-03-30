@@ -31,14 +31,41 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") # For PSE and Search
 CUSTOM_SEARCH_ENGINE_ID = os.getenv("CUSTOM_SEARCH_ENGINE_ID")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 
-# Model names for OpenRouter
-GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "anthropic/claude-4.6-opus")
-GEMINI_SUMMARY_MODEL = os.getenv("GEMINI_SUMMARY_MODEL", "anthropic/claude-4.6-opus")
-GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "anthropic/claude-4.6-opus")
-GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS = int(os.getenv("GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS", "150000"))
+# Unified OpenRouter model settings.
+# The rest of the codebase should only read these stable names, so future model
+# swaps only require changes in config/env rather than across call sites.
+def _get_first_env(*names: str, default: str | None = None) -> str | None:
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value
+    return default
 
-GEMINI_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS = int(os.getenv("GEMINI_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS", "150000"))
-GEMINI_PRO_MODEL_CONTEXT_LIMIT_CHARS = int(os.getenv("GEMINI_PRO_MODEL_CONTEXT_LIMIT_CHARS", "2000000"))  # Pro model has much larger context
+
+OPENROUTER_MODEL = _get_first_env(
+    "OPENROUTER_MODEL",
+    "OPUS_MODEL",
+    "OPUS_PRO_MODEL",
+    "GEMINI_PRO_MODEL",
+    "OPUS_SUMMARY_MODEL",
+    "GEMINI_SUMMARY_MODEL",
+    "OPUS_FLASH_MODEL",
+    "GEMINI_FLASH_MODEL",
+    default="anthropic/claude-4.6-opus",
+)
+OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS = int(
+    _get_first_env(
+        "OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS",
+        "OPUS_MODEL_CONTEXT_LIMIT_CHARS",
+        "OPUS_PRO_MODEL_CONTEXT_LIMIT_CHARS",
+        "GEMINI_PRO_MODEL_CONTEXT_LIMIT_CHARS",
+        "OPUS_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS",
+        "GEMINI_SUMMARY_MODEL_CONTEXT_LIMIT_CHARS",
+        "OPUS_FLASH_MODEL_CONTEXT_LIMIT_CHARS",
+        "GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS",
+        default="2000000",
+    )
+)
 
 # Perplexity API Configuration (Optional -- This logic has been abandoned. Perplexity is a piece of shit. Google is not going to be replaced by Perplexity.) 
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
@@ -157,9 +184,7 @@ def validate_config():
     
     dotenv_status_message = f"successfully from {DOTENV_PATH}" if os.path.exists(DOTENV_PATH) else "from environment variables (or .env not found/readable)"
     print(f"Configuration loaded {dotenv_status_message}.")
-    print(f"  GEMINI_FLASH_MODEL: {GEMINI_FLASH_MODEL}")
-    print(f"  GEMINI_SUMMARY_MODEL: {GEMINI_SUMMARY_MODEL}")
-    print(f"  GEMINI_PRO_MODEL: {GEMINI_PRO_MODEL}")
+    print(f"  OPENROUTER_MODEL: {OPENROUTER_MODEL}")
     print(f"  Output directory: {DEFAULT_OUTPUT_DIR}")
     
     # Display date range configuration
