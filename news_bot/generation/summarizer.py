@@ -52,10 +52,9 @@ The summary is for {audience_en}.
 ## Requirements
 
 ### Safety & Content Exclusion (STRICT)
-- **NO CHINA-RELATED SENSITIVE POLITICS:** You must NOT summarize articles primarily about Chinese domestic politics, Chinese party ideology, sensitive geopolitical conflict involving China, or Chinese government policy unrelated to education, student life, visas, immigration, or campus operations.
-- Only return "SUMMARY_SKIPPED_SENSITIVE_TOPIC" when the article is primarily about one of those China-related sensitive political topics.
-- Do NOT skip ordinary university or local public-interest reporting merely because it mentions conflict, protest, labor action, controversy, or funding disputes.
-- In particular, articles about university strikes, campus protests, budget cuts, union disputes, education funding, administrative controversy, lawsuits, crime, or local civic issues should still be summarized if they are standard news reporting and not primarily about China-related sensitive politics.
+- **NO CHINESE POLITICS:** You must NOT summarize articles related to Chinese domestic politics, sensitive geopolitical issues between China and other nations, or Chinese government policies unrelated to education.
+- If the article is primarily about political disputes, ideology, or sensitive diplomatic friction involving China:
+  - **STOP.** Return exactly this string: "SUMMARY_SKIPPED_SENSITIVE_TOPIC"
 - Only summarize content related to university news, student life, local safety, academic policies, or general immigration/visa updates relevant to students.
 
 ### Accuracy & Factuality (Highest Priority)
