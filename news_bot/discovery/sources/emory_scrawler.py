@@ -1,4 +1,5 @@
 import re
+import time
 from datetime import datetime, date, timedelta
 from urllib.parse import urljoin, urlparse
 import requests
@@ -7,6 +8,12 @@ from ...discovery.date_extractor import extract_date_from_url, extract_ymd_from_
 from ...core import config, school_config
 
 school = school_config.SCHOOL_PROFILES['emory']
+
+EMORY_REQUEST_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+}
+EMORY_RETRYABLE_STATUS_CODES = {405, 429, 500, 502, 503, 504}
 
 def _month_iter(start_date: date, end_date: date):
     y, m = start_date.year, start_date.month
@@ -62,12 +69,39 @@ def build_emory_external_page_variants(page_url: str, page_num: int) -> list[str
     return deduped_variants
 
 
+def fetch_emory_page(url: str, referer: str | None = None, max_attempts: int = 3) -> requests.Response:
+    headers = dict(EMORY_REQUEST_HEADERS)
+    if referer:
+        headers['Referer'] = referer
+
+    last_response = None
+    for attempt in range(1, max_attempts + 1):
+        response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
+        last_response = response
+
+        if response.status_code == 404:
+            return response
+        if response.status_code not in EMORY_RETRYABLE_STATUS_CODES:
+            response.raise_for_status()
+            return response
+
+        if attempt == max_attempts:
+            response.raise_for_status()
+
+        sleep_seconds = attempt
+        print(
+            f"  Emory request retry {attempt}/{max_attempts - 1} for {url} "
+            f"after status {response.status_code}"
+        )
+        time.sleep(sleep_seconds)
+
+    assert last_response is not None
+    return last_response
+
+
 def extract_date_from_emory_article_page(article_url: str) -> str | None:
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        resp = requests.get(article_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
+        resp = fetch_emory_page(article_url)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.content, 'html.parser')
 
@@ -148,8 +182,8 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
     if not school.get('category_pages'):
         return []
 
-    # Emory uses a monthly index page
-    page_url = school['category_pages'][1]  # https://www.emorywheel.com/section/news?page=1&per_page=20
+    # Emory Wheel now canonicalizes this feed under /category/news.
+    page_url = school['category_pages'][1]
     # Try to scan multiple pages if the site supports pagination
     max_pages = config.MAX_CATEGORY_PAGES_TO_SCAN  # Use config value    
     break_signal = False
@@ -160,10 +194,7 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
         current_page_url = f"{page_url}?page={page_num}&per_page=20"
         print(f"Checking Emory wheel page: {current_page_url}")
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            resp = requests.get(current_page_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
+            resp = fetch_emory_page(current_page_url, referer=page_url)
             if resp.status_code == 404:
                 print(f"  Page not found: {current_page_url}")
                 continue
@@ -172,7 +203,17 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
             
             
             for article in soup.find_all('article'):
-                a = article.find_all('a', href=True)[1]
+                article_links = [
+                    link for link in article.find_all('a', href=True)
+                    if '/article/' in (link.get('href') or '')
+                ]
+                if not article_links:
+                    continue
+
+                a = next(
+                    (link for link in article_links if link.get_text(strip=True)),
+                    article_links[0],
+                )
                 href = a['href']
                 abs_url = urljoin(current_page_url, href)
                 if 'emorywheel.com/article/' not in abs_url:
@@ -180,9 +221,17 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
                 if abs_url in processed_urls:
                     continue
                 
-                title = a['title'] or 'Untitled'
-                url_date = article.find_all('span', class_='dateline')[1].get_text(strip=True)
-                url_date = extract_ymd_from_text(url_date)
+                title = (
+                    a.get_text(strip=True)
+                    or a.get('title')
+                    or a.get('aria-label', '').removeprefix('Read ').strip()
+                    or 'Untitled'
+                )
+
+                time_tag = article.find('time')
+                url_date = parse_date_value(
+                    time_tag.get('datetime') or time_tag.get_text(strip=True)
+                ) if time_tag else None
                 
                 # Compare dates only after converting to a date object
                 if url_date:
@@ -191,7 +240,6 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
                         if article_date < start_date:
                             break_signal = True                       
                         if article_date < start_date or article_date > end_date:
-                            print(start_date, url_date, end_date)
                             continue
                     except ValueError:
                         # If parsing fails, keep the article without filtering by date
@@ -307,10 +355,7 @@ def emory_scan_external_source_pages_for_date_range() -> list[dict]:
             current_page_url = None
             for page_variant in build_emory_external_page_variants(page_url, page_num):
                 try:
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    }
-                    candidate_resp = requests.get(page_variant, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
+                    candidate_resp = fetch_emory_page(page_variant, referer=page_url)
                     if candidate_resp.status_code == 404:
                         continue
                     candidate_resp.raise_for_status()

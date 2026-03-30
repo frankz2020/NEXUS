@@ -27,7 +27,7 @@ SCHOOL_PROFILES = {
     "category_pages": [
       # Monthly and root index are handled by emory_crawler; keep for completeness
       "https://news.emory.edu/stories/index.html",
-      "https://www.emorywheel.com/section/news",
+      "https://www.emorywheel.com/category/news",
     ],
     "external_category_pages": [
       "https://www.atlantamagazine.com/newsculture-articles/",
