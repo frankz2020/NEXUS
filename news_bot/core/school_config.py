@@ -101,7 +101,7 @@ SCHOOL_PROFILES = {
     "id": 5,
     "school_name": "University of Southern California",
     "school_location": "Los Angeles",
-    "domains": ["news.usc.edu", "usc.edu"],
+    "domains": ["news.usc.edu", "usc.edu", "www.uscannenbergmedia.com", "uscannenbergmedia.com", "www.dailytrojan.com", "dailytrojan.com"],
     "category_pages": ["https://www.uscannenbergmedia.com/pf/api/v3/content/fetch/story-feed-query"],
     "archive_patterns": [
       "https://www.uscannenbergmedia.com/allnews/",
