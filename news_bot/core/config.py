@@ -67,6 +67,17 @@ OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS = int(
     )
 )
 
+OPENROUTER_IMAGE_FILTER_MODEL = _get_first_env(
+    "OPENROUTER_IMAGE_FILTER_MODEL",
+    "OPENROUTER_MODEL",
+    default=OPENROUTER_MODEL,
+)
+IMAGE_FILTER_OCR_CHAR_THRESHOLD = int(os.getenv("IMAGE_FILTER_OCR_CHAR_THRESHOLD", "200"))
+IMAGE_FILTER_LINE_THRESHOLD = int(os.getenv("IMAGE_FILTER_LINE_THRESHOLD", "8"))
+IMAGE_FILTER_PARAGRAPH_THRESHOLD = int(os.getenv("IMAGE_FILTER_PARAGRAPH_THRESHOLD", "3"))
+IMAGE_FILTER_TEXT_COVERAGE_THRESHOLD = float(os.getenv("IMAGE_FILTER_TEXT_COVERAGE_THRESHOLD", "0.35"))
+IMAGE_FILTER_MIN_CHARS_FOR_COVERAGE = int(os.getenv("IMAGE_FILTER_MIN_CHARS_FOR_COVERAGE", "80"))
+
 # Perplexity API Configuration (Optional -- This logic has been abandoned. Perplexity is a piece of shit. Google is not going to be replaced by Perplexity.) 
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_SEARCH_MODEL = os.getenv("PERPLEXITY_SEARCH_MODEL", "sonar-pro") 

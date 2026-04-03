@@ -28,6 +28,7 @@ from news_bot.processing.image_generator import (
     generate_image_from_article,
     make_reference_image_from_reports,
 )
+from news_bot.processing.cover_image_filter import should_skip_image_url
 
 # =================== 学校 → 品牌色 & 文件夹名 ===================
 SCHOOL_BRAND_MAP = {
@@ -200,6 +201,14 @@ def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
             if tag and tag.get(attr):
                 url = _abs(tag.get(attr))
                 if _looks_like_image_url(url):
+                    should_skip, reason, metrics = should_skip_image_url(url)
+                    if should_skip:
+                        print(
+                            f"Skipping cover image from source ({reason}): {url[:80]}... "
+                            f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                            f"coverage={metrics['text_coverage_ratio']}"
+                        )
+                        continue
                     return url
 
         # 如果没有找到 meta 标签，尝试找页面中的大图
@@ -211,6 +220,14 @@ def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
             h = _to_int(img.get("height"))
             # 只选择足够大的图片（避免 logo 等小图）
             if (w and w < 240) or (h and h < 160):
+                continue
+            should_skip, reason, metrics = should_skip_image_url(src)
+            if should_skip:
+                print(
+                    f"Skipping page image ({reason}): {src[:80]}... "
+                    f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                    f"coverage={metrics['text_coverage_ratio']}"
+                )
                 continue
             return src
     except Exception as e:
@@ -288,7 +305,15 @@ def parse_news_from_doc(doc: Dict, extract_images: bool = True) -> List[Dict]:
         if extract_images and not cur.get("cover_image"):
             img = _first_image_url(p, inline_objects)
             if img:
-                cur["cover_image"] = img
+                should_skip, reason, metrics = should_skip_image_url(img)
+                if should_skip:
+                    print(
+                        f"[DEBUG] Skipping embedded doc image ({reason}): {img[:80]}... "
+                        f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                        f"coverage={metrics['text_coverage_ratio']}"
+                    )
+                else:
+                    cur["cover_image"] = img
 
         links = _all_links(p)
         if links:

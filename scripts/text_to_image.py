@@ -40,6 +40,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from news_bot.processing.image_generator import generate_image_from_article
+from news_bot.processing.cover_image_filter import should_skip_image_url
 
 
 # =================== 从URL抓取封面图片 ===================
@@ -92,6 +93,14 @@ def fetch_cover_from_url(page_url: str, timeout: int = 12) -> str:
             if tag and tag.get(attr):
                 url = _abs(tag.get(attr))
                 if _looks_like_image_url(url):
+                    should_skip, reason, metrics = should_skip_image_url(url)
+                    if should_skip:
+                        print(
+                            f"⚠️  跳过正文截图类图片 ({reason}): {url[:60]}... "
+                            f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                            f"coverage={metrics['text_coverage_ratio']}"
+                        )
+                        continue
                     print(f"✅ 找到封面图片: {url[:60]}...")
                     return url
 
@@ -113,6 +122,14 @@ def fetch_cover_from_url(page_url: str, timeout: int = 12) -> str:
                 pass
             # 只选择足够大的图片（避免 logo 等小图）
             if (w and w < 240) or (h and h < 160):
+                continue
+            should_skip, reason, metrics = should_skip_image_url(src)
+            if should_skip:
+                print(
+                    f"⚠️  跳过正文截图类图片 ({reason}): {src[:60]}... "
+                    f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                    f"coverage={metrics['text_coverage_ratio']}"
+                )
                 continue
             print(f"✅ 找到封面图片: {src[:60]}...")
             return src

@@ -16,6 +16,94 @@ from ..core import config
 # Setup logging
 logger = logging.getLogger('article_handler')
 
+MIN_ARTICLE_WORDS = 80
+
+
+def _extract_text_from_container(container) -> str:
+    """Extract the cleanest text we can from a candidate content container."""
+    if not container:
+        return ""
+
+    # Work on a detached copy so we can safely prune noisy elements.
+    container_soup = BeautifulSoup(str(container), 'html.parser')
+
+    for unwanted_tag in container_soup(['script', 'style', 'nav', 'footer', 'aside', 'header', 'form', 'button', 'input', 'textarea', 'select', 'option']):
+        unwanted_tag.decompose()
+
+    common_annoyances_selectors = [
+        '[class*="mask"]',
+        '[class*="ad"], [id*="ad"]',
+        '[class*="popup"], [id*="popup"]',
+        '[class*="overlay"], [id*="overlay"]',
+        '[class*="banner"], [id*="banner"]',
+        '[class*="cookie"], [id*="cookie"]',
+        '[class*="share"], [id*="share"]',
+    ]
+    for selector in common_annoyances_selectors:
+        for unwanted_element in container_soup.select(selector):
+            unwanted_element.decompose()
+
+    paragraphs = container_soup.find_all('p')
+    paragraph_text = "\n".join(
+        p.get_text(" ", strip=True)
+        for p in paragraphs
+        if p.get_text(" ", strip=True)
+    )
+    alternative_text = container_soup.get_text(separator='\n', strip=True)
+
+    if len(alternative_text.split()) > len(paragraph_text.split()):
+        return alternative_text
+    return paragraph_text
+
+
+def _iter_json_nodes(node):
+    if isinstance(node, dict):
+        yield node
+        for value in node.values():
+            yield from _iter_json_nodes(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _iter_json_nodes(item)
+
+
+def _extract_text_from_jsonld(soup: BeautifulSoup) -> str | None:
+    """Return article text from JSON-LD when available."""
+    best_text = ""
+    article_types = {"Article", "NewsArticle", "ReportageNewsArticle"}
+
+    for script in soup.find_all('script', type='application/ld+json'):
+        raw_json = script.string or script.get_text()
+        if not raw_json or not raw_json.strip():
+            continue
+        try:
+            data = json.loads(raw_json)
+        except Exception:
+            continue
+
+        for item in _iter_json_nodes(data):
+            item_type = item.get('@type') or item.get('type')
+            if isinstance(item_type, str):
+                item_types = [item_type]
+            elif isinstance(item_type, list):
+                item_types = [t for t in item_type if isinstance(t, str)]
+            else:
+                item_types = []
+
+            if not any(t in article_types for t in item_types):
+                continue
+
+            candidate_text = item.get('articleBody') or item.get('text') or ""
+            cleaned_text = "\n".join(
+                line.strip() for line in str(candidate_text).splitlines() if line.strip()
+            )
+            if len(cleaned_text.split()) > len(best_text.split()):
+                best_text = cleaned_text
+
+    if len(best_text.split()) >= MIN_ARTICLE_WORDS:
+        return best_text
+    return None
+
+
 def fetch_and_extract_text(url: str) -> str | None:
     """
     Fetches content from a URL and extracts clean textual content.
@@ -135,48 +223,45 @@ def fetch_and_extract_text(url: str) -> str | None:
                 print(f"DEBUG: LA Times AMP fetch failed: {_e_lat_amp}")
                 pass
 
-        # --- Generic extraction (ordered: specific containers first, 'article' last) ---
+        # Structured article data is often cleaner than the rendered layout.
         if not article_body:
-            main_content_tags = ['.entry-content', '.post-content', '.td-post-content', 'main', 'article']
-            for tag_or_class in main_content_tags:
-                if tag_or_class.startswith('.'):
-                    article_body = soup.find(class_=tag_or_class[1:])
-                else:
-                    article_body = soup.find(tag_or_class)
-                if article_body:
-                    print(f"DEBUG: article_body found via generic selector '{tag_or_class}', url: {url}")
-                    break
+            jsonld_text = _extract_text_from_jsonld(soup)
+            if jsonld_text:
+                print(f"DEBUG: extractor used JSON-LD articleBody/text, url: {url}")
+                fetch_elapsed = time.time() - fetch_start
+                logger.info(f"[FETCH] ✅ Successfully extracted text from {url}: {len(jsonld_text)} chars, {len(jsonld_text.split())} words (took {fetch_elapsed:.2f}s)")
+                print(f"Successfully extracted text from {url} (approx. {len(jsonld_text.split())} words).")
+                return jsonld_text
+
+        # --- Generic extraction: score common content containers instead of taking the first hit ---
+        if not article_body:
+            main_content_tags = [
+                '[itemprop="articleBody"]',
+                '.entry-content',
+                '.post-content',
+                '.td-post-content',
+                'article',
+                'main',
+            ]
+            best_candidate = None
+            best_selector = None
+            best_word_count = 0
+            for selector in main_content_tags:
+                for candidate in soup.select(selector):
+                    candidate_text = _extract_text_from_container(candidate)
+                    candidate_word_count = len(candidate_text.split())
+                    if candidate_word_count > best_word_count:
+                        best_candidate = candidate
+                        best_selector = selector
+                        best_word_count = candidate_word_count
+            if best_candidate:
+                article_body = best_candidate
+                print(f"DEBUG: article_body found via generic selector '{best_selector}', url: {url}")
         
         if not article_body:
             article_body = soup.body
 
-        text_content = ""
-        if article_body:
-            for unwanted_tag in article_body(['script', 'style', 'nav', 'footer', 'aside', 'header', 'form', 'button', 'input', 'textarea', 'select', 'option']):
-                unwanted_tag.decompose()
-            
-            common_annoyances_selectors = [
-                '[class*="mask"]',
-                '[class*="ad"], [id*="ad"]' ,
-                '[class*="popup"], [id*="popup"]' ,
-                '[class*="overlay"], [id*="overlay"]' ,
-                '[class*="banner"], [id*="banner"]' ,
-                '[class*="cookie"], [id*="cookie"]',
-                '[class*="share"], [id*="share"]' # Share buttons/widgets
-            ]
-            for selector in common_annoyances_selectors:
-                for unwanted_element in article_body.select(selector):
-                    unwanted_element.decompose()
-
-            paragraphs = article_body.find_all('p')
-            # print(f"DEBUG: paragraphs: {paragraphs}\n")
-            if paragraphs:
-                text_content = "\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
-            
-            if not text_content or len(text_content.split()) < 30: # Slightly lower threshold
-                alternative_text = article_body.get_text(separator='\n', strip=True)
-                if len(alternative_text.split()) > len(text_content.split()):
-                    text_content = alternative_text
+        text_content = _extract_text_from_container(article_body) if article_body else ""
         
         if not text_content.strip():
              print(f"Info: No significant text content from primary containers of {url}. Trying full soup minus known non-content tags.")

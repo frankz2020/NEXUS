@@ -9,15 +9,37 @@ from ..core import config
 logger = logging.getLogger('openrouter_client')
 
 
-def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -> str | None:
+def _coerce_message_content_to_text(message: dict) -> str:
     """
-    Generate content using OpenRouter API.
-    
+    Normalize OpenRouter/OpenAI-style message payloads to plain text.
+    Some providers return structured content blocks instead of a raw string.
+    """
+    content = message.get("content", "")
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            text_value = block.get("text")
+            if isinstance(text_value, str) and text_value.strip():
+                parts.append(text_value.strip())
+        return "\n".join(parts).strip()
+
+    return ""
+
+
+def generate_content_from_messages(messages: list, model: str = None, temperature: float = 0.7) -> str | None:
+    """
+    Generate content using OpenRouter API with raw chat messages.
+
     Args:
-        prompt: The prompt text to send to the model
+        messages: OpenAI-compatible chat messages payload
         model: Model name (defaults to OPENROUTER_MODEL from config)
         temperature: Temperature for generation (default 0.7)
-    
+
     Returns:
         Generated text content or None if error
     """
@@ -30,7 +52,7 @@ def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -
         model = config.OPENROUTER_MODEL
     
     logger.info(f"[OPENROUTER] Generating content with model: {model}")
-    logger.debug(f"[OPENROUTER] Prompt length: {len(prompt)} chars")
+    logger.debug(f"[OPENROUTER] Message count: {len(messages)}")
     logger.debug(f"[OPENROUTER] Temperature: {temperature}")
     
     headers = {
@@ -57,12 +79,7 @@ def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -
     
     payload = {
         "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
+        "messages": messages,
         "temperature": temperature
     }
     
@@ -84,9 +101,19 @@ def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -
         
         # Extract content from OpenRouter response
         if "choices" in data and len(data["choices"]) > 0:
-            content = data["choices"][0].get("message", {}).get("content", "").strip()
+            choice = data["choices"][0]
+            message = choice.get("message", {})
+            content = _coerce_message_content_to_text(message)
             logger.info(f"[OPENROUTER] ✅ Content generated: {len(content)} chars")
             logger.debug(f"[OPENROUTER] Response preview: {content[:200]}...")
+
+            if not content:
+                refusal = message.get("refusal")
+                finish_reason = choice.get("finish_reason")
+                if refusal:
+                    logger.warning(f"[OPENROUTER] Empty text content with refusal: {refusal}")
+                if finish_reason:
+                    logger.warning(f"[OPENROUTER] Empty text content, finish_reason={finish_reason}")
             
             # Log usage info if available
             if "usage" in data:
@@ -124,4 +151,28 @@ def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -
         logger.error(f"[OPENROUTER] Traceback: {traceback.format_exc()}")
         print(f"Unexpected error during OpenRouter API call: {e}")
         return None
+
+
+def generate_content(prompt: str, model: str = None, temperature: float = 0.7) -> str | None:
+    """
+    Generate content using OpenRouter API.
+    
+    Args:
+        prompt: The prompt text to send to the model
+        model: Model name (defaults to OPENROUTER_MODEL from config)
+        temperature: Temperature for generation (default 0.7)
+    
+    Returns:
+        Generated text content or None if error
+    """
+    return generate_content_from_messages(
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        model=model,
+        temperature=temperature,
+    )
 
