@@ -65,9 +65,6 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 
 ## 要求
 
-### 内容安全警告 (Strict)
-- **禁止政治敏感内容：** 如果源文本包含中国政治、敏感地缘政治或政府层面的外交纠纷，请不要翻译。直接回复 "SKIP: POLITICAL CONTENT"。
-
 ### 准确性与事实性（最高优先级）
 - 仅翻译英文摘要中明确陈述的信息 - 不要添加、推断或猜测
 - 保留所有事实细节：日期、姓名、数字、地点、组织
@@ -263,7 +260,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
      - (正确) Jacob Remes 表示：“我们并不想罢工。”
      - (错误 - 变成了间接引语) Jacob Remes 表示他们并不想罢工。
      - (错误 - 用了英文标点) Jacob Remes 表示:"我们并不想罢工."
-10. 如果英文原文包含长句，应按中文习惯拆分为简短的句子，避免英文从句结构直接转译。
+10.- 如果英文原文包含长句，应按中文习惯拆分为简短的句子，避免英文从句结构直接转译。
 - 例如：
   - 错误：研究人员表示，微塑料的暴露在健康方面可能有害，虽然因果关系尚未确立，但影响可能是显著的。
   - 正确：研究人员表示，微塑料暴露可能对健康有害。虽然因果关系尚未确立，但其影响可能显著。
@@ -325,11 +322,6 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
         elapsed = time.time() - start_time
         
         if full_response_text:
-            # Handle political skip flag
-            if "SKIP: POLITICAL CONTENT" in full_response_text:
-                logger.warning(f"[TRANSLATE] 🛑 Content skipped during translation (Political). URL: {source_url}")
-                return None
-
             logger.info(f"[TRANSLATE] Response received: {len(full_response_text)} chars (took {elapsed:.2f}s)")
             logger.debug(f"[TRANSLATE] Response preview: {full_response_text[:200]}...")
             
@@ -423,8 +415,8 @@ if __name__ == '__main__':
     
     from news_bot.core import config 
     config.validate_config()
-    if not hasattr(config, 'OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS'):
-        config.OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS = 2000000
+    if not hasattr(config, 'GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS'):
+        config.GEMINI_FLASH_MODEL_CONTEXT_LIMIT_CHARS = 100000
 
     sample_english_data = {
         "summary": "NYU announced a new visa support initiative. This helps international students, especially those from China, facing visa delays. President Linda G. Mills stated NYU is committed. Workshops and extended advising are included. Hundreds will benefit next academic year.",
