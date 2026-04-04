@@ -52,7 +52,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
             "refined_chinese_news_report": "翻译跳过：英文摘要为空 (Translation skipped: English summary was empty)"
         }
 
-    logger.info(f"[TRANSLATE] Using model: {config.TRANSLATE_MODEL}")
+    logger.info(f"[TRANSLATE] Using model: {config.OPENROUTER_MODEL}")
     print(f"Translating, generating title, and refining Chinese news report for: {source_url[:100]}...")
 
     prompt = f"""你是一位专业的中文新闻写作者和翻译。你的任务是将英文新闻摘要翻译成一篇准确、客观、精炼的中文新闻，并生成一个吸引人的标题。
@@ -64,9 +64,6 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 将英文新闻摘要翻译成简体中文，生成一个吸引人的标题，并在一步中完成翻译和精炼。
 
 ## 要求
-
-### 内容安全警告 (Strict)
-- **禁止政治敏感内容：** 如果源文本包含中国政治、敏感地缘政治或政府层面的外交纠纷，请不要翻译。直接回复 "SKIP: POLITICAL CONTENT"。
 
 ### 准确性与事实性（最高优先级）
 - 仅翻译英文摘要中明确陈述的信息 - 不要添加、推断或猜测
@@ -302,7 +299,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 
     try:
         logger.info("[TRANSLATE] Sending request to OpenRouter API...")
-        print(f"Sending translation+refinement request to OpenRouter API ({config.TRANSLATE_MODEL})...")
+        print(f"Sending translation+refinement request to OpenRouter API ({config.OPENROUTER_MODEL})...")
         
         # Log the prompt
         prompt_logger.log_prompt(
@@ -319,17 +316,12 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
         start_time = time.time()
         full_response_text = openrouter_client.generate_content(
             prompt=prompt,
-            model=config.TRANSLATE_MODEL,
+            model=config.OPENROUTER_MODEL,
             temperature=0.7
         )
         elapsed = time.time() - start_time
         
         if full_response_text:
-            # Handle political skip flag
-            if "SKIP: POLITICAL CONTENT" in full_response_text:
-                logger.warning(f"[TRANSLATE] 🛑 Content skipped during translation (Political). URL: {source_url}")
-                return None
-
             logger.info(f"[TRANSLATE] Response received: {len(full_response_text)} chars (took {elapsed:.2f}s)")
             logger.debug(f"[TRANSLATE] Response preview: {full_response_text[:200]}...")
             
