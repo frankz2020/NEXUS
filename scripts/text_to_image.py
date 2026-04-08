@@ -28,7 +28,7 @@ from datetime import datetime
 
 try:
     import requests
-    from urllib.parse import urljoin
+    from urllib.parse import urljoin, urlparse
     from bs4 import BeautifulSoup
     HAS_WEB_DEPS = True
 except ImportError:
@@ -44,9 +44,147 @@ from news_bot.processing.cover_image_filter import should_skip_image_url
 
 
 # =================== 从URL抓取封面图片 ===================
+def _image_url_from_tag(tag, page_url: str) -> str:
+    """从 img/picture/source 标签提取最可能的图片 URL。"""
+    if not tag:
+        return ""
+
+    def _abs(u: str) -> str:
+        return urljoin(page_url, (u or "").strip())
+
+    for attr in ("src", "data-src", "data-lazy-src", "data-original", "data-image", "data-url"):
+        value = (tag.get(attr) or "").strip()
+        if value:
+            return _abs(value)
+
+    srcset = (tag.get("srcset") or tag.get("data-srcset") or "").strip()
+    if srcset:
+        first = srcset.split(",")[0].strip().split(" ")[0].strip()
+        if first:
+            return _abs(first)
+
+    return ""
+
+
+def _node_text_signature(tag) -> str:
+    parts = []
+    for value in (
+        tag.get("class", []),
+        [tag.get("id", "")],
+        [tag.get("role", "")],
+        [tag.get("aria-label", "")],
+        [tag.name or ""],
+    ):
+        if isinstance(value, list):
+            parts.extend(str(x) for x in value if x)
+        elif value:
+            parts.append(str(value))
+    return " ".join(parts).lower()
+
+
+def _is_bad_image_context(tag) -> bool:
+    bad_keywords = (
+        "related",
+        "recommend",
+        "latest",
+        "trending",
+        "popular",
+        "sidebar",
+        "footer",
+        "header",
+        "nav",
+        "menu",
+        "share",
+        "social",
+        "author",
+        "avatar",
+        "logo",
+        "icon",
+        "ad",
+        "ads",
+        "promo",
+        "sponsor",
+        "newsletter",
+        "comment",
+    )
+    current = tag
+    depth = 0
+    while current is not None and depth < 6:
+        signature = _node_text_signature(current)
+        if any(k in signature for k in bad_keywords):
+            return True
+        current = current.parent
+        depth += 1
+    return False
+
+
+def _looks_like_image_url(url: str) -> bool:
+    if not url:
+        return False
+    bad = (".svg", ".gif", "data:image/svg", "sprite", "logo", "icon")
+    u = url.lower()
+    return not any(b in u for b in bad)
+
+
+def _fetch_wp_featured_image(page_url: str, headers: dict, timeout: int) -> str:
+    """优先从 WordPress REST API 读取文章主图，避免抓到页面壳里的推荐图。"""
+    try:
+        parsed = urlparse(page_url)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        page_norm = page_url.rstrip("/")
+        slug_hint = parsed.path.rstrip("/").split("/")[-1].replace("-", " ").strip()
+        if not slug_hint:
+            return ""
+
+        search_resp = requests.get(
+            f"{base_url}/wp-json/wp/v2/search",
+            params={"search": slug_hint},
+            headers=headers,
+            timeout=timeout,
+        )
+        search_resp.raise_for_status()
+        results = search_resp.json()
+        match = None
+        for item in results:
+            if (item.get("url") or "").rstrip("/") == page_norm:
+                match = item
+                break
+        if not match:
+            return ""
+
+        links = match.get("_links", {}).get("self", [])
+        if not links:
+            return ""
+        post_resp = requests.get(
+            links[0]["href"],
+            params={"_embed": "1"},
+            headers=headers,
+            timeout=timeout,
+        )
+        post_resp.raise_for_status()
+        post = post_resp.json()
+
+        media = post.get("_embedded", {}).get("wp:featuredmedia", [])
+        if media:
+            src = (media[0].get("source_url") or "").strip()
+            if src:
+                return src
+
+        content_html = post.get("content", {}).get("rendered", "")
+        if content_html:
+            content_soup = BeautifulSoup(content_html, "html.parser")
+            first_img = content_soup.find("img")
+            return _image_url_from_tag(first_img, page_url)
+    except Exception:
+        return ""
+    return ""
+
+
 def fetch_cover_from_url(page_url: str, timeout: int = 12) -> str:
     """
-    从来源页面抓取封面图片（og:image, twitter:image 等）
+    从新闻正文里抓取实际展示的主图，不读取 og:image / twitter:image。
     
     Args:
         page_url: 新闻文章的URL
@@ -66,75 +204,81 @@ def fetch_cover_from_url(page_url: str, timeout: int = 12) -> str:
     
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X) Chrome/124 Safari/537.36"}
+
+        wp_src = _fetch_wp_featured_image(page_url, headers, timeout)
+        if _looks_like_image_url(wp_src):
+            should_skip, reason, metrics = should_skip_image_url(wp_src)
+            if should_skip:
+                print(
+                    f"⚠️  跳过正文截图类图片 ({reason}): {wp_src[:60]}... "
+                    f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                    f"coverage={metrics['text_coverage_ratio']}"
+                )
+            else:
+                print(f"✅ 找到正文主图: {wp_src[:60]}...")
+                return wp_src
+
         r = requests.get(page_url, headers=headers, timeout=timeout)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        def _abs(u: str) -> str:
-            return urljoin(page_url, (u or "").strip())
-
-        def _looks_like_image_url(url: str) -> bool:
-            if not url:
-                return False
-            bad = (".svg", ".gif", "data:image/svg", "sprite", "logo", "icon")
-            u = url.lower()
-            return not any(b in u for b in bad)
-
-        # 优先尝试 og:image, twitter:image 等 meta 标签
-        for sel, attr in [
-            ('meta[property="og:image"]', "content"),
-            ('meta[name="og:image"]', "content"),
-            ('meta[property="twitter:image"]', "content"),
-            ('meta[name="twitter:image"]', "content"),
-            ('meta[itemprop="image"]', "content"),
-            ('link[rel="image_src"]', "href"),
+        # 只在正文容器内找图片，避免抓到推荐流/侧栏/页脚图片
+        article_containers = []
+        seen_ids = set()
+        for sel in [
+            "article",
+            "main article",
+            '[role="main"] article',
+            "main",
+            '[role="main"]',
+            ".article-content",
+            ".entry-content",
+            ".post-content",
+            ".story-content",
+            ".article-body",
+            ".post-body",
+            ".sno-story-body",
+            ".sno-article-page",
         ]:
-            tag = soup.select_one(sel)
-            if tag and tag.get(attr):
-                url = _abs(tag.get(attr))
-                if _looks_like_image_url(url):
-                    should_skip, reason, metrics = should_skip_image_url(url)
-                    if should_skip:
-                        print(
-                            f"⚠️  跳过正文截图类图片 ({reason}): {url[:60]}... "
-                            f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
-                            f"coverage={metrics['text_coverage_ratio']}"
-                        )
-                        continue
-                    print(f"✅ 找到封面图片: {url[:60]}...")
-                    return url
+            for container in soup.select(sel):
+                ident = id(container)
+                if ident in seen_ids:
+                    continue
+                seen_ids.add(ident)
+                article_containers.append(container)
 
-        # 如果没有找到 meta 标签，尝试找页面中的大图
-        for img in soup.find_all("img"):
-            src = _abs(img.get("src") or "")
-            if not _looks_like_image_url(src):
-                continue
-            # 尝试获取图片尺寸
-            w = None
-            h = None
-            try:
-                w = int(str(img.get("width", "")).strip())
-            except (ValueError, AttributeError):
-                pass
-            try:
-                h = int(str(img.get("height", "")).strip())
-            except (ValueError, AttributeError):
-                pass
-            # 只选择足够大的图片（避免 logo 等小图）
-            if (w and w < 240) or (h and h < 160):
-                continue
-            should_skip, reason, metrics = should_skip_image_url(src)
-            if should_skip:
-                print(
-                    f"⚠️  跳过正文截图类图片 ({reason}): {src[:60]}... "
-                    f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
-                    f"coverage={metrics['text_coverage_ratio']}"
-                )
-                continue
-            print(f"✅ 找到封面图片: {src[:60]}...")
-            return src
+        for container in article_containers:
+            for img in container.find_all("img"):
+                if _is_bad_image_context(img):
+                    continue
+                src = _image_url_from_tag(img, page_url)
+                if not _looks_like_image_url(src):
+                    continue
+                w = None
+                h = None
+                try:
+                    w = int(str(img.get("width", "")).strip())
+                except (ValueError, AttributeError):
+                    pass
+                try:
+                    h = int(str(img.get("height", "")).strip())
+                except (ValueError, AttributeError):
+                    pass
+                # 只选择足够大的图片（避免 logo、作者头像等）
+                if (w and w < 240) or (h and h < 160):
+                    continue
+                should_skip, reason, metrics = should_skip_image_url(src)
+                if should_skip:
+                    print(
+                        f"⚠️  跳过正文截图类图片 ({reason}): {src[:60]}... "
+                        f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                        f"coverage={metrics['text_coverage_ratio']}"
+                    )
+                    continue
+                print(f"✅ 找到正文主图: {src[:60]}...")
+                return src
             
-        print("⚠️  未能从URL抓取到封面图片")
+        print("⚠️  未能从正文中抓取到主图")
     except Exception as e:
         print(f"⚠️  抓取封面图片失败: {e}")
     
