@@ -195,6 +195,41 @@ def _image_url_from_tag(tag, page_url: str) -> str:
     return ""
 
 
+def _normalize_url_for_match(url: str) -> str:
+    parsed = urlparse(url or "")
+    if not parsed.scheme or not parsed.netloc:
+        return (url or "").rstrip("/")
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{parsed.path.rstrip('/')}"
+
+
+def _meta_content(soup: BeautifulSoup, key: str) -> str:
+    tag = soup.find("meta", attrs={"property": key}) or soup.find("meta", attrs={"name": key})
+    return (tag.get("content") or "").strip() if tag else ""
+
+
+def _canonical_url_from_soup(soup: BeautifulSoup) -> str:
+    canonical = soup.find("link", rel=lambda value: value and "canonical" in value)
+    if canonical and canonical.get("href"):
+        return (canonical.get("href") or "").strip()
+    return _meta_content(soup, "og:url")
+
+
+def _meta_image_from_soup(soup: BeautifulSoup, page_url: str) -> str:
+    """Use article-scoped social image metadata when it clearly matches this URL."""
+    canonical_url = _canonical_url_from_soup(soup)
+    if canonical_url and _normalize_url_for_match(canonical_url) != _normalize_url_for_match(page_url):
+        return ""
+
+    for key in ("og:image", "og:image:secure_url", "twitter:image", "twitter:image:src"):
+        src = _meta_content(soup, key)
+        if not src:
+            continue
+        image_url = urljoin(page_url, src)
+        if _looks_like_image_url(image_url):
+            return image_url
+    return ""
+
+
 def _node_text_signature(tag) -> str:
     parts = []
     for value in (
@@ -328,6 +363,17 @@ def fetch_cover_from_source(page_url: str, timeout: int = 12) -> str:
         r = requests.get(page_url, headers=headers, timeout=timeout)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
+
+        meta_src = _meta_image_from_soup(soup, page_url)
+        if meta_src:
+            should_skip, reason, metrics = should_skip_image_url(meta_src)
+            if not should_skip:
+                return meta_src
+            print(
+                f"Skipping metadata image ({reason}): {meta_src[:80]}... "
+                f"chars={metrics['ocr_char_count']} lines={metrics['line_count']} "
+                f"coverage={metrics['text_coverage_ratio']}"
+            )
 
         # 只在正文容器内找图片，避免抓到推荐流/侧栏/页脚图片
         article_containers = []
