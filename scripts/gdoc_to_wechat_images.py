@@ -598,7 +598,7 @@ def render_to_images(
         if prefer_source_images and src_url:
             print(f"  [{idx}] Fetching cover from: {src_url[:50]}... (source preferred)")
             fetched = fetch_cover_from_source(src_url)
-            return idx, (fetched or cover_image)
+            return idx, fetched
 
         if not cover_image and src_url:
             print(f"  [{idx}] Fetching cover from: {src_url[:50]}...")
@@ -640,8 +640,18 @@ def render_to_images(
             title = it.get("title", "").strip()
             content = _normalize_content(it.get("content", "").strip())
             
-            # Use pre-fetched cover or existing one
-            cover_image = it.get("cover_image") or cover_images.get(idx, "")
+            # Honor source-preferred mode by using fetched article images
+            # before any embedded Google Doc image.
+            source_cover = cover_images.get(idx, "")
+            doc_cover = it.get("cover_image") or ""
+            if prefer_source_images:
+                cover_image = source_cover or doc_cover
+            else:
+                cover_image = doc_cover or source_cover
+
+            if cover_image:
+                cover_origin = "source" if source_cover and cover_image == source_cover else "doc"
+                print(f"  [{idx}] Using {cover_origin} cover image: {cover_image[:80]}...")
 
             out_png = school_out / f"{idx:02d}_{_slug(title)[:40]}.png"
 
