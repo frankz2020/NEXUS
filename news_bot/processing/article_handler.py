@@ -10,6 +10,7 @@ import json
 import re # For URL date parsing
 from ..discovery.date_extractor import extract_date_from_url
 from ..utils import prompt_logger, openrouter_client
+from ..utils import http_fetcher
 
 from ..core import config
 
@@ -112,24 +113,30 @@ def fetch_and_extract_text(url: str) -> str | None:
     print(f"Fetching and extracting text from: {url}")
     fetch_start = time.time()
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
         logger.debug(f"[FETCH] Sending GET request with timeout={config.URL_FETCH_TIMEOUT}s")
-        response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        logger.debug(f"[FETCH] Response status: {response.status_code}, content-length: {len(response.content)}")
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
+        fetched_page = http_fetcher.fetch_page(url, timeout=config.URL_FETCH_TIMEOUT)
+        logger.debug(
+            f"[FETCH] Response status: {fetched_page.status_code}, "
+            f"content-length: {len(fetched_page.content)}, source={fetched_page.source}"
+        )
+        url = fetched_page.url
+        soup = BeautifulSoup(fetched_page.content, 'html.parser')
         logger.debug(f"[FETCH] HTML parsed successfully")
         # if read full button found, extract the text from button's url (apply to UBC)
         try:
-            read_full_button = soup.find('a', text='Read the full message')
+            read_full_button = soup.find('a', string='Read the full message')
             if read_full_button:
-                url = read_full_button['href']
-                print(f"DEBUG: read full button found, url: {url}\n")
-                response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-                response.raise_for_status()
-                soup = BeautifulSoup(response.content, 'html.parser')
+                from urllib.parse import urljoin
+
+                read_full_url = urljoin(url, read_full_button['href'])
+                print(f"DEBUG: read full button found, url: {read_full_url}\n")
+                fetched_page = http_fetcher.fetch_page(
+                    read_full_url,
+                    timeout=config.URL_FETCH_TIMEOUT,
+                    referer=url,
+                )
+                url = fetched_page.url
+                soup = BeautifulSoup(fetched_page.content, 'html.parser')
         except Exception as e:
             print(f"not read full button found")
             pass
@@ -202,23 +209,26 @@ def fetch_and_extract_text(url: str) -> str | None:
                 amp_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_pairs), parts.fragment))
                 if amp_url != url:
                     print(f"DEBUG: Fetching LA Times AMP page: {amp_url}")
-                    amp_resp = requests.get(amp_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-                    if amp_resp.ok:
-                        amp_soup = BeautifulSoup(amp_resp.content, 'html.parser')
-                        # Prefer focused article containers; otherwise read from <main> or <article>
-                        amp_selectors = [
-                            '[data-qa="article-body"]',
-                            'div.article-body',
-                            'article .article-body',
-                            'article',
-                            'main'
-                        ]
-                        for css in amp_selectors:
-                            el = amp_soup.select_one(css)
-                            if el:
-                                article_body = el
-                                print(f"DEBUG: LA Times AMP extractor using selector: '{css}'")
-                                break
+                    amp_page = http_fetcher.fetch_page(
+                        amp_url,
+                        timeout=config.URL_FETCH_TIMEOUT,
+                        referer=url,
+                    )
+                    amp_soup = BeautifulSoup(amp_page.content, 'html.parser')
+                    # Prefer focused article containers; otherwise read from <main> or <article>
+                    amp_selectors = [
+                        '[data-qa="article-body"]',
+                        'div.article-body',
+                        'article .article-body',
+                        'article',
+                        'main'
+                    ]
+                    for css in amp_selectors:
+                        el = amp_soup.select_one(css)
+                        if el:
+                            article_body = el
+                            print(f"DEBUG: LA Times AMP extractor using selector: '{css}'")
+                            break
             except Exception as _e_lat_amp:
                 print(f"DEBUG: LA Times AMP fetch failed: {_e_lat_amp}")
                 pass

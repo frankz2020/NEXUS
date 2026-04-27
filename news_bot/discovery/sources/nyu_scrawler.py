@@ -4,6 +4,7 @@ from datetime import date, timedelta, datetime
 from googleapiclient.discovery import build # For Google Custom Search API
 from ...core import config, school_config
 from ...discovery.date_extractor import extract_date_from_url
+from ...utils import http_fetcher
 import requests # For fetching category pages
 from bs4 import BeautifulSoup # For parsing category pages
 from urllib.parse import urljoin # For resolving relative URLs
@@ -55,17 +56,13 @@ def nyu_scan_archive_pages_for_date_range() -> list[dict[str, str]]:
             print(f"Checking archive: {archive_url}")
             
             try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                response = requests.get(archive_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-                
-                if response.status_code == 404:
+                fetched_page = http_fetcher.fetch_page(archive_url, timeout=config.URL_FETCH_TIMEOUT)
+
+                if fetched_page.status_code == 404:
                     print(f"  Archive page not found: {archive_url}")
                     continue
-                
-                response.raise_for_status()
-                soup = BeautifulSoup(response.content, 'html.parser')
+
+                soup = BeautifulSoup(fetched_page.content, 'html.parser')
                 
                 # Find all links that look like articles
                 article_links = []
@@ -126,6 +123,11 @@ def nyu_scan_archive_pages_for_date_range() -> list[dict[str, str]]:
                 if articles_found_in_archive > 0:
                     print(f"  Found {articles_found_in_archive} relevant articles in this archive")
                 
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 404:
+                    print(f"  Archive page not found: {archive_url}")
+                else:
+                    print(f"  Error accessing archive {archive_url}: {e}")
             except requests.exceptions.RequestException as e:
                 print(f"  Error accessing archive {archive_url}: {e}")
             except Exception as e:
@@ -167,18 +169,14 @@ def nyu_scan_category_pages_for_links() -> list[dict[str, str]]:
             
             print(f"Scanning category page {page_num}: {current_page_url}")
             try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                response = requests.get(current_page_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
+                fetched_page = http_fetcher.fetch_page(current_page_url, timeout=config.URL_FETCH_TIMEOUT)
                 
                 # If pagination doesn't exist, break the loop
-                if page_num > 1 and response.status_code == 404:
+                if page_num > 1 and fetched_page.status_code == 404:
                     print(f"  Page {page_num} not found, stopping pagination.")
                     break
-                    
-                response.raise_for_status()
-                soup = BeautifulSoup(response.content, 'html.parser')
+
+                soup = BeautifulSoup(fetched_page.content, 'html.parser')
 
                 candidate_links = []
                 
@@ -332,6 +330,13 @@ def nyu_scan_category_pages_for_links() -> list[dict[str, str]]:
                 if len(found_articles) >= config.MAX_SEARCH_RESULTS_TO_PROCESS * 3 or articles_found_on_page == 0:
                     break
                     
+            except requests.exceptions.HTTPError as e_req:
+                if e_req.response is not None and e_req.response.status_code == 404 and page_num > 1:
+                    print(f"  Page {page_num} not found, stopping pagination.")
+                    break
+                print(f"Error fetching category page {current_page_url}: {e_req}")
+                if page_num == 1:
+                    break  # If first page fails, don't try pagination
             except requests.exceptions.RequestException as e_req:
                 print(f"Error fetching category page {current_page_url}: {e_req}")
                 if page_num == 1:
