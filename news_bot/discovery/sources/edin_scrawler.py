@@ -401,6 +401,8 @@ def edin_scan_external_source_pages_for_date_range() -> list[dict]:
 def edin_scan_category_pages_for_date_range() -> list[dict]:
     return (
         edin_scan_edinburgh_news_pages_for_date_range()
-        + edin_scan_thestudent_news_pages_for_date_range()
+        # The Student News is disabled: thestudentnews.co.uk serves a bot-check page (HTTP 403)
+        # to both requests and the Playwright fallback. Re-add
+        # edin_scan_thestudent_news_pages_for_date_range() if the site stops blocking.
         + edin_scan_external_source_pages_for_date_range()
     )

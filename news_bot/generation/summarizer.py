@@ -8,6 +8,18 @@ from ..utils import prompt_logger, openrouter_client
 # Setup logging
 logger = logging.getLogger('summarizer')
 
+SUMMARY_ERROR_PREFIXES = ("Summarization failed", "Summarization skipped")
+
+
+def is_summary_usable(summary: str | None) -> bool:
+    """
+    True unless the summarizer returned nothing or one of its own error/skip messages.
+    Matches only the prefixes this module emits, so real summaries mentioning
+    "failed" or "skipped" (e.g. "the bill failed to pass") are kept.
+    """
+    return bool(summary and summary.strip()) and not summary.strip().startswith(SUMMARY_ERROR_PREFIXES)
+
+
 def generate_summary_with_gemini(school: dict[str, str], article_text: str, article_url: str, article_title: str = "") -> str | None:
     """
     Generates a professional English news summary using Gemini 2.5 Pro.
@@ -108,6 +120,10 @@ Key points to cover, ensuring important details are retained:
 - Provide the summary directly, without introductory phrases like 'This article is about...'
 - Write in complete sentences with proper grammar
 
+### Missing Content Check (Mandatory)
+- If the article text does NOT contain the actual news story (for example it only contains navigation menus, tags, comment-section guidelines, subscription/paywall prompts, cookie notices, or a headline with no body), do NOT write a summary.
+- In that case output exactly `CONTENT_UNAVAILABLE` and nothing else.
+
 ### Format Requirements
 - Length: 5-7 sentences, or 100-180 words
 - Structure: Coherent narrative flow, not bullet points
@@ -153,6 +169,11 @@ Detailed News Summary (5-7 sentences, 100-180 words, for {audience_en}):
             logger.warning(f"[SUMMARIZE] Empty summary received (took {elapsed:.2f}s)")
             print(f"Warning: Empty summary received from OpenRouter for {article_url}. Text length: {len(article_text)} chars.")
             return "Summarization failed: AI returned empty response."
+
+        if "CONTENT_UNAVAILABLE" in summary_text[:200].upper():
+            logger.warning(f"[SUMMARIZE] Article content unavailable (extraction returned no real story) for {article_url}")
+            print(f"Warning: Article body was not extracted for {article_url}; skipping.")
+            return "Summarization skipped: article content unavailable (failed to extract article body)."
 
         logger.info(f"[SUMMARIZE] ✅ Summary generated: {len(summary_text)} chars (took {elapsed:.2f}s)")
         logger.debug(f"[SUMMARIZE] Summary preview: {summary_text[:150]}...")

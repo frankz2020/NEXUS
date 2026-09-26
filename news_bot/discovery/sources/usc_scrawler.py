@@ -448,5 +448,7 @@ def usc_scan_archive_pages_for_date_range() -> list[dict]:
     annenberg_media_articles = usc_scan_annenberg_media_for_links()
     latimes_news_articles = usc_latimes_news_pages_for_links()
     usc_news_articles = usc_scan_uscnews_for_links()
-    daily_trojan_articles = usc_scan_daily_trojan_for_links()
-    return annenberg_media_articles + usc_news_articles + latimes_news_articles + daily_trojan_articles
+    # Daily Trojan is disabled: dailytrojan.com serves a Cloudflare challenge page (HTTP 403)
+    # to both requests and the Playwright fallback, so every scan and article fetch fails.
+    # Re-enable usc_scan_daily_trojan_for_links() here if the site stops blocking automated clients.
+    return annenberg_media_articles + usc_news_articles + latimes_news_articles

@@ -24,6 +24,9 @@ def orchestrate_breaking_news():
             "original_title": email["subject"]
         }
         translation_output = translator.translate_and_restyle_to_chinese(english_report_data_for_translation)
+        if not translator.is_translation_usable(translation_output):
+            print(f"Skipping email '{email['subject']}': Chinese translation unusable (no valid title/report)")
+            continue
         email_reports.append(translation_output)
     
     # Save the compiled news reports    

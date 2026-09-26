@@ -19,31 +19,54 @@ logger = logging.getLogger('article_handler')
 
 MIN_ARTICLE_WORDS = 80
 
+# Matches whole class/id tokens (or dash/underscore-delimited parts of them) that mark
+# non-article chrome. Substring matching is not safe here: '[class*="ad"]' also hits
+# utility classes like 'leading-7', 'heading', 'shadow' and deleted real article bodies.
+_NOISE_TOKEN_RE = re.compile(
+    r'(?:^|[-_])(?:ad|ads|advert|adverts|advertisement|advertising|adsbygoogle|dfp|'
+    r'sponsor|sponsored|popup|pop-up|modal|overlay|banner|cookie|cookies|consent|'
+    r'share|sharing|sharedaddy|social-share|mask|paywall|newsletter-signup)(?:[-_]|$)',
+    re.IGNORECASE,
+)
+
+
+def _is_noise_element(element) -> bool:
+    tokens = list(element.get('class') or [])
+    element_id = element.get('id')
+    if element_id:
+        tokens.append(element_id)
+    return any(_NOISE_TOKEN_RE.search(token) for token in tokens)
+
+
+def _pruned_copy(container) -> BeautifulSoup:
+    """Return a detached copy of the container with non-article chrome removed."""
+    container_soup = BeautifulSoup(str(container), 'html.parser')
+
+    for unwanted_tag in container_soup(['script', 'style', 'nav', 'footer', 'aside', 'header', 'form', 'button', 'input', 'textarea', 'select', 'option']):
+        unwanted_tag.decompose()
+
+    for unwanted_element in container_soup.find_all(_is_noise_element):
+        if not unwanted_element.decomposed:
+            unwanted_element.decompose()
+    return container_soup
+
+
+def _paragraph_word_count(container) -> int:
+    """Words in substantial <p> blocks: favours real article bodies over tag lists and comment rules."""
+    container_soup = _pruned_copy(container)
+    return sum(
+        len(words)
+        for words in (p.get_text(" ", strip=True).split() for p in container_soup.find_all('p'))
+        if len(words) >= 8
+    )
+
 
 def _extract_text_from_container(container) -> str:
     """Extract the cleanest text we can from a candidate content container."""
     if not container:
         return ""
 
-    # Work on a detached copy so we can safely prune noisy elements.
-    container_soup = BeautifulSoup(str(container), 'html.parser')
-
-    for unwanted_tag in container_soup(['script', 'style', 'nav', 'footer', 'aside', 'header', 'form', 'button', 'input', 'textarea', 'select', 'option']):
-        unwanted_tag.decompose()
-
-    common_annoyances_selectors = [
-        '[class*="mask"]',
-        '[class*="ad"], [id*="ad"]',
-        '[class*="popup"], [id*="popup"]',
-        '[class*="overlay"], [id*="overlay"]',
-        '[class*="banner"], [id*="banner"]',
-        '[class*="cookie"], [id*="cookie"]',
-        '[class*="share"], [id*="share"]',
-    ]
-    for selector in common_annoyances_selectors:
-        for unwanted_element in container_soup.select(selector):
-            unwanted_element.decompose()
-
+    container_soup = _pruned_copy(container)
     paragraphs = container_soup.find_all('p')
     paragraph_text = "\n".join(
         p.get_text(" ", strip=True)
@@ -105,16 +128,63 @@ def _extract_text_from_jsonld(soup: BeautifulSoup) -> str | None:
     return None
 
 
-def fetch_and_extract_text(url: str) -> str | None:
+def _extract_ubyssey_live_updates(soup: BeautifulSoup) -> str | None:
+    """
+    The Ubyssey renders live-blog articles client-side from embedded JSON
+    (#page-info-at-load for title/lede, #updates-at-load for the posts, newest first).
+    """
+    updates_script = soup.find('script', id='updates-at-load')
+    if not updates_script:
+        return None
+    try:
+        updates = json.loads(updates_script.string or updates_script.get_text())
+    except Exception:
+        return None
+    if not isinstance(updates, list):
+        return None
+
+    parts = []
+    page_info_script = soup.find('script', id='page-info-at-load')
+    if page_info_script:
+        try:
+            meta = json.loads(page_info_script.string or page_info_script.get_text()).get('meta') or {}
+            parts.extend(str(meta[key]).strip() for key in ('title', 'lede') if meta.get(key))
+        except Exception:
+            pass
+
+    for update in sorted(
+        (u for u in updates if isinstance(u, dict)),
+        key=lambda u: str(u.get('publish_date') or ''),
+    ):
+        update_text = _extract_text_from_container(BeautifulSoup(update.get('html') or '', 'html.parser'))
+        if update_text.strip():
+            parts.append(update_text.strip())
+
+    text = "\n".join(parts)
+    if len(text.split()) >= MIN_ARTICLE_WORDS:
+        return text
+    return None
+
+
+def fetch_and_extract_text(url: str, _browser_retry: bool = False) -> str | None:
     """
     Fetches content from a URL and extracts clean textual content.
+
+    If the plain HTTP fetch yields a thin page (fewer than MIN_ARTICLE_WORDS words),
+    the page is fetched once more through the browser fallback in case the body is
+    rendered client-side.
     """
+    requested_url = url
     logger.info(f"[FETCH] Starting fetch for URL: {url}")
     print(f"Fetching and extracting text from: {url}")
     fetch_start = time.time()
     try:
         logger.debug(f"[FETCH] Sending GET request with timeout={config.URL_FETCH_TIMEOUT}s")
-        fetched_page = http_fetcher.fetch_page(url, timeout=config.URL_FETCH_TIMEOUT)
+        fetched_page = http_fetcher.fetch_page(
+            url,
+            timeout=config.URL_FETCH_TIMEOUT,
+            force_browser=_browser_retry,
+        )
         logger.debug(
             f"[FETCH] Response status: {fetched_page.status_code}, "
             f"content-length: {len(fetched_page.content)}, source={fetched_page.source}"
@@ -233,6 +303,13 @@ def fetch_and_extract_text(url: str) -> str | None:
                 print(f"DEBUG: LA Times AMP fetch failed: {_e_lat_amp}")
                 pass
 
+        if not article_body and 'ubyssey.ca' in domain:
+            ubyssey_text = _extract_ubyssey_live_updates(soup)
+            if ubyssey_text:
+                print(f"DEBUG: extractor used Ubyssey live updates JSON, url: {url}")
+                logger.info(f"[FETCH] ✅ Successfully extracted text from {url}: {len(ubyssey_text.split())} words (Ubyssey live updates)")
+                return ubyssey_text
+
         # Structured article data is often cleaner than the rendered layout.
         if not article_body:
             jsonld_text = _extract_text_from_jsonld(soup)
@@ -256,17 +333,22 @@ def fetch_and_extract_text(url: str) -> str | None:
             best_candidate = None
             best_selector = None
             best_word_count = 0
+            best_score = (-1, -1)
             for selector in main_content_tags:
                 for candidate in soup.select(selector):
-                    candidate_text = _extract_text_from_container(candidate)
-                    candidate_word_count = len(candidate_text.split())
-                    if candidate_word_count > best_word_count:
+                    candidate_word_count = len(_extract_text_from_container(candidate).split())
+                    # Rank by words in real paragraphs first, total words as tie-breaker.
+                    candidate_score = (_paragraph_word_count(candidate), candidate_word_count)
+                    if candidate_score > best_score:
                         best_candidate = candidate
                         best_selector = selector
                         best_word_count = candidate_word_count
-            if best_candidate:
+                        best_score = candidate_score
+            if best_candidate and best_word_count >= MIN_ARTICLE_WORDS:
                 article_body = best_candidate
                 print(f"DEBUG: article_body found via generic selector '{best_selector}', url: {url}")
+            elif best_candidate:
+                print(f"DEBUG: best generic selector '{best_selector}' only had {best_word_count} words; using full <body>, url: {url}")
         
         if not article_body:
             article_body = soup.body
@@ -279,12 +361,26 @@ def fetch_and_extract_text(url: str) -> str | None:
                 unwanted_tag.decompose()
              text_content = soup.get_text(separator='\n', strip=True)
 
-        if not text_content.strip():
+        cleaned_text = "\n".join([line for line in text_content.splitlines() if line.strip()])
+
+        # Runs before the empty-text bail-out so fully client-rendered pages (no text at all
+        # in the raw HTML) also get the browser retry.
+        if (
+            len(cleaned_text.split()) < MIN_ARTICLE_WORDS
+            and not _browser_retry
+            and fetched_page.source != "playwright"
+        ):
+            logger.info(f"[FETCH] Thin content ({len(cleaned_text.split())} words) from {url}; retrying with browser rendering")
+            print(f"Info: Only {len(cleaned_text.split())} words extracted from {url}; retrying with browser rendering.")
+            browser_text = fetch_and_extract_text(requested_url, _browser_retry=True)
+            if browser_text and len(browser_text.split()) > len(cleaned_text.split()):
+                return browser_text
+
+        if not cleaned_text.strip():
             logger.warning(f"[FETCH] No significant text content extracted from {url}")
             print(f"Warning: Still no significant text content extracted from {url}.")
             return None
 
-        cleaned_text = "\n".join([line for line in text_content.splitlines() if line.strip()])
         fetch_elapsed = time.time() - fetch_start
         logger.info(f"[FETCH] ✅ Successfully extracted text from {url}: {len(cleaned_text)} chars, {len(cleaned_text.split())} words (took {fetch_elapsed:.2f}s)")
         print(f"Successfully extracted text from {url} (approx. {len(cleaned_text.split())} words).")

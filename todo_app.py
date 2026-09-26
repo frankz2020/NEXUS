@@ -366,7 +366,7 @@ def run_news_bot_async(school_id, start_date_str, end_date_str, max_reports):
                 )
                 summary_elapsed = time.time() - summary_start
                 
-                if not english_summary or "failed" in english_summary.lower():
+                if not summarizer.is_summary_usable(english_summary):
                     logger.warning(f"[ARTICLE {i+1}] SKIP: Summary generation failed (took {summary_elapsed:.2f}s)")
                     logger.debug(f"[ARTICLE {i+1}] Summary result: {english_summary[:200] if english_summary else 'None'}...")
                     continue
@@ -385,6 +385,9 @@ def run_news_bot_async(school_id, start_date_str, end_date_str, max_reports):
                 }
                 translation_output = translator.translate_and_restyle_to_chinese(english_report_data)
                 translate_elapsed = time.time() - translate_start
+                if not translator.is_translation_usable(translation_output):
+                    logger.warning(f"[ARTICLE {i+1}] SKIP: Chinese translation unusable (took {translate_elapsed:.2f}s)")
+                    continue
                 
                 chinese_title = "中文标题失败"
                 refined_chinese_report = "翻译失败"
@@ -1114,7 +1117,7 @@ if __name__ == '__main__':
     print(f"📊 Dashboard: http://0.0.0.0:{port}")
     print(f"📁 Output Directory: {config.DEFAULT_OUTPUT_DIR}")
     print(f"🔧 Environment: {os.environ.get('FLASK_ENV', 'development')}")
-    print("=" * 60)h
+    print("=" * 60)
     
     # Bind to 0.0.0.0 for Railway deployment
     app.run(host='0.0.0.0', port=port, debug=debug, threaded=True)

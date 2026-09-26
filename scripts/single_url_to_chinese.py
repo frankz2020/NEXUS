@@ -94,7 +94,7 @@ def process_single_url(url: str, custom_title: str = None, show_english: bool = 
         article_title=custom_title or "N/A"
     )
     
-    if not english_summary or "failed" in english_summary.lower():
+    if not summarizer.is_summary_usable(english_summary):
         print("❌ 错误: 无法生成英文摘要")
         return None
     
@@ -112,8 +112,8 @@ def process_single_url(url: str, custom_title: str = None, show_english: bool = 
     
     translation_output = translator.translate_and_restyle_to_chinese(translation_input)
     
-    if not translation_output:
-        print("错误: 翻译失败")
+    if not translator.is_translation_usable(translation_output):
+        print("错误: 翻译失败（模型没有返回有效的中文标题/正文）")
         return None
     
     chinese_title = translation_output.get("chinese_title", "标题生成失败")

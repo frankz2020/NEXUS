@@ -467,8 +467,8 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
         english_summary = summarizer.generate_summary_with_gemini(
             school_profile, article_text, url, title or "Article"
         )
-        if not english_summary or "failed" in english_summary.lower():
-            update_task(task_id, error="Failed to generate summary")
+        if not summarizer.is_summary_usable(english_summary):
+            update_task(task_id, error="Failed to generate summary (article body may not have been extracted)")
             return
         
         # Step 3: Translate to Chinese
@@ -481,8 +481,8 @@ def worker_url_to_doc(task_id: str, url: str, title: str = None):
         }
         translation_output = translator.translate_and_restyle_to_chinese(english_report_data)
         
-        if not translation_output:
-            update_task(task_id, error="Translation failed")
+        if not translator.is_translation_usable(translation_output):
+            update_task(task_id, error="Translation failed: model did not return a valid Chinese title/report")
             return
         
         chinese_title = translation_output.get("chinese_title", "Untitled")

@@ -121,7 +121,7 @@ def run_news_bot_for_school(
         english_summary = summarizer.generate_summary_with_gemini(
             school_profile, article_text, article_url, original_title
         )
-        if not english_summary or "failed" in english_summary.lower() or "skipped" in english_summary.lower():
+        if not summarizer.is_summary_usable(english_summary):
             continue
         
         # Step 4: Translate to Chinese
@@ -132,6 +132,9 @@ def run_news_bot_for_school(
             "original_title": original_title
         }
         translation_output = translator.translate_and_restyle_to_chinese(english_report_data_for_translation)
+        if not translator.is_translation_usable(translation_output):
+            print(f"  Skipping: Chinese translation unusable (no valid title) for {article_url}")
+            continue
         
         chinese_title = "中文标题失败"
         refined_chinese_report = "翻译失败"
@@ -294,7 +297,7 @@ def run_news_bot():
 
         # Step 3: Generate English summary
         english_summary = summarizer.generate_summary_with_gemini(choosen_school, article_text, article_url, original_title)
-        if not english_summary or "failed" in english_summary.lower() or "skipped" in english_summary.lower():
+        if not summarizer.is_summary_usable(english_summary):
             print(f"  Skipping: Failed to generate English summary or summary invalid.")
             continue
         print(f"  Info: Successfully generated English summary.")
@@ -307,6 +310,9 @@ def run_news_bot():
             "original_title": original_title
         }
         translation_output = translator.translate_and_restyle_to_chinese(english_report_data_for_translation)
+        if not translator.is_translation_usable(translation_output):
+            print(f"  Skipping: Chinese translation unusable (no valid title) for {article_url}")
+            continue
         
         chinese_title = "中文标题失败"
         refined_chinese_report = "翻译失败"

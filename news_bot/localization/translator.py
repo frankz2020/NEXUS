@@ -17,6 +17,26 @@ def _refine_chinese_news_report_with_gemini(chinese_text: str, source_url: str, 
     """
     return chinese_text
 
+TITLE_FAILED_PLACEHOLDER = "标题生成失败 (Title generation failed)"
+REPORT_FAILED_PLACEHOLDER = "翻译失败或跳过 (Translation failed or skipped)"
+
+
+def is_translation_usable(translation_output: dict | None) -> bool:
+    """
+    True only if the translator produced a real Chinese title AND a real report body.
+    Callers should skip the article (and not create a Google Doc) when this is False.
+    """
+    if not translation_output:
+        return False
+    if "translation_ok" in translation_output:
+        return bool(translation_output["translation_ok"])
+    # Backward compatibility for outputs without the flag
+    title = str(translation_output.get("chinese_title", ""))
+    report = str(translation_output.get("refined_chinese_news_report", ""))
+    return bool(title.strip()) and bool(report.strip()) and \
+        title != TITLE_FAILED_PLACEHOLDER and report != REPORT_FAILED_PLACEHOLDER
+
+
 def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
     """
     Translates English summary to Chinese, generates title, and refines the report in ONE comprehensive step.
@@ -40,8 +60,8 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
     logger.debug(f"[TRANSLATE] Original title: {original_title[:50]}...")
 
     default_error_return = {
-        "chinese_title": "标题生成失败 (Title generation failed)",
-        "refined_chinese_news_report": "翻译失败或跳过 (Translation failed or skipped)"
+        "chinese_title": TITLE_FAILED_PLACEHOLDER,
+        "refined_chinese_news_report": REPORT_FAILED_PLACEHOLDER
     }
 
     if not english_summary.strip():
@@ -49,7 +69,8 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
         print(f"Info: Skipping translation for {source_url} due to empty English summary.")
         return {
             "chinese_title": "无标题 (No title for empty summary)",
-            "refined_chinese_news_report": "翻译跳过：英文摘要为空 (Translation skipped: English summary was empty)"
+            "refined_chinese_news_report": "翻译跳过：英文摘要为空 (Translation skipped: English summary was empty)",
+            "translation_ok": False
         }
 
     logger.info(f"[TRANSLATE] Using model: {config.OPENROUTER_MODEL}")
@@ -296,6 +317,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
 """
     chinese_title = default_error_return["chinese_title"]
     refined_chinese_report = default_error_return["refined_chinese_news_report"]
+    title_parsed = False  # set True only when a real title was extracted from the model output
 
     try:
         logger.info("[TRANSLATE] Sending request to OpenRouter API...")
@@ -346,7 +368,8 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
                     if line:  # Skip blank lines
                         report_lines.append(line)
                 
-                if report_lines:
+                if report_lines and chinese_title:
+                    title_parsed = True
                     refined_chinese_report = '\n'.join(report_lines)
                     logger.info(f"[TRANSLATE] ✅ Parsed successfully - Title: {chinese_title[:30]}..., Report: {len(refined_chinese_report)} chars")
                 else:
@@ -363,6 +386,7 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
                     if len(first_line) <= 30 and not first_line.endswith('。'):
                         chinese_title = first_line
                         refined_chinese_report = '\n'.join(lines[1:]).strip() if len(lines) > 1 else default_error_return["refined_chinese_news_report"]
+                        title_parsed = bool(first_line) and bool(refined_chinese_report.strip())
                         logger.info(f"[TRANSLATE] Fallback parsing succeeded - Title: {chinese_title[:30]}...")
                     else:
                         # Entire response is report, generate default title
@@ -400,9 +424,18 @@ def translate_and_restyle_to_chinese(english_summary_data: dict) -> dict | None:
     print(f"Translation+refinement complete for {source_url[:100]}... Title: '{chinese_title[:50]}...'")
 
     # Return refined Chinese report (translation and refinement are now combined in one step)
+    translation_ok = (
+        title_parsed
+        and chinese_title != default_error_return["chinese_title"]
+        and refined_chinese_report != default_error_return["refined_chinese_news_report"]
+    )
+    if not translation_ok:
+        logger.warning(f"[TRANSLATE] ❌ Translation not usable for {source_url} - model output had no parsable title. "
+                       f"Output preview: {refined_chinese_report[:120]}")
     return {
         "chinese_title": chinese_title,
-        "refined_chinese_news_report": refined_chinese_report
+        "refined_chinese_news_report": refined_chinese_report,
+        "translation_ok": translation_ok
     }
 
 if __name__ == '__main__':
