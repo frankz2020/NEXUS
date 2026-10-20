@@ -1,11 +1,13 @@
 import re
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, date, timedelta
 from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from ...discovery.date_extractor import extract_date_from_url, extract_ymd_from_text
 from ...core import config, school_config
+from ...utils import http_fetcher
 
 school = school_config.SCHOOL_PROFILES['emory']
 
@@ -14,6 +16,15 @@ EMORY_REQUEST_HEADERS = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 }
 EMORY_RETRYABLE_STATUS_CODES = {405, 429, 500, 502, 503, 504}
+# Statuses that still fail after http_fetcher's browser fallback (and, for 429, after backoff
+# retries) mean the Wheel is blocking this server; it answers datacenter clients such as
+# Railway with 405.
+EMORY_BLOCKED_STATUS_CODES = {403, 405, 429}
+# news.emory.edu moved to Drupal in Oct 2026: the monthly /stories/YYYY/MM/ index pages
+# now 404, and story URLs are /stories/YYYY/MM/<slug> listed in the sitemap.
+EMORY_NEWS_SITEMAP_URL = 'https://news.emory.edu/sitemap.xml'
+SITEMAP_NS = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+EMORY_STORY_URL_RE = re.compile(r'^https://news\.emory\.edu/stories/(\d{4})/(\d{2})/[^/?#]+/?$')
 
 def _month_iter(start_date: date, end_date: date):
     y, m = start_date.year, start_date.month
@@ -172,6 +183,25 @@ def emory_collect_generic_candidate_links(soup: BeautifulSoup, current_page_url:
     return candidate_links
 
 
+def fetch_emory_wheel_page(url: str, referer: str, force_browser: bool, max_attempts: int = 3):
+    """http_fetcher.fetch_page plus the backoff retry on 429/5xx that fetch_emory_page provides."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return http_fetcher.fetch_page(
+                url,
+                timeout=config.URL_FETCH_TIMEOUT,
+                referer=referer,
+                force_browser=force_browser,
+            )
+        except requests.exceptions.HTTPError as e:
+            status_code = getattr(e.response, 'status_code', None)
+            retryable = status_code is not None and (status_code == 429 or status_code >= 500)
+            if not retryable or attempt == max_attempts:
+                raise
+            print(f"  Emory request retry {attempt}/{max_attempts - 1} for {url} after status {status_code}")
+            time.sleep(attempt)
+
+
 def emory_scan_wheel_pages_for_date_range() -> list[dict]:
     start_date, end_date = config.get_news_date_range()
     print(f"\n--- Scanning Archive Pages for {start_date} to {end_date} ---")
@@ -187,6 +217,7 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
     # Try to scan multiple pages if the site supports pagination
     max_pages = config.MAX_CATEGORY_PAGES_TO_SCAN  # Use config value    
     break_signal = False
+    use_browser = False
     
     for page_num in range(1, max_pages):
         if break_signal:
@@ -194,12 +225,10 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
         current_page_url = f"{page_url}?page={page_num}&per_page=20"
         print(f"Checking Emory wheel page: {current_page_url}")
         try:
-            resp = fetch_emory_page(current_page_url, referer=page_url)
-            if resp.status_code == 404:
-                print(f"  Page not found: {current_page_url}")
-                continue
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.content, 'html.parser')
+            fetched_page = fetch_emory_wheel_page(current_page_url, page_url, force_browser=use_browser)
+            # Once plain requests has been blocked, skip straight to the browser for later pages.
+            use_browser = fetched_page.source == 'playwright'
+            soup = BeautifulSoup(fetched_page.content, 'html.parser')
             
             
             for article in soup.find_all('article'):
@@ -255,6 +284,11 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
                 
         except requests.exceptions.RequestException as e:
             print(f"  Error accessing Emory wheel page {current_page_url}: {e}")
+            status_code = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status_code in EMORY_BLOCKED_STATUS_CODES:
+                # Every later page is blocked the same way, so don't retry them one by one.
+                print("  Emory Wheel is blocking this server even via browser; skipping remaining pages")
+                break
         except Exception as e:
             print(f"  Error processing Emory wheel page {current_page_url}: {e}")
 
@@ -263,61 +297,93 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
 
 
 
+def fetch_emory_story_meta(article_url: str) -> tuple[str, str | None]:
+    """Read a story's title and publish date, which the sitemap doesn't carry.
+
+    Story pages have no date metadata; the publish date ("October 9, 2026") sits in a
+    <strong> next to the <h1> inside the page's <hgroup>.
+    """
+    slug = article_url.rstrip('/').rsplit('/', 1)[-1]
+    title, publish_date = slug.replace('-', ' ').capitalize(), None
+
+    resp = fetch_emory_page(article_url)
+    resp.raise_for_status()  # fetch_emory_page returns 404s without raising
+    soup = BeautifulSoup(resp.content, 'html.parser')
+
+    h1 = soup.find('h1')
+    if h1 and h1.get_text(strip=True):
+        title = h1.get_text(strip=True)
+    header = h1.find_parent('hgroup') if h1 else None
+    if header:
+        for strong in header.find_all('strong'):
+            publish_date = extract_ymd_from_text(strong.get_text(strip=True))
+            if publish_date:
+                break
+    return title, publish_date
+
+
+def fetch_emory_sitemap(url: str) -> ET.Element:
+    resp = fetch_emory_page(url)
+    resp.raise_for_status()  # fetch_emory_page returns 404s without raising
+    return ET.fromstring(resp.content)
+
+
 def emory_scan_edu_pages_for_date_range() -> list[dict]:
     start_date, end_date = config.get_news_date_range()
-    print(f"\n--- Scanning Archive Pages for {start_date} to {end_date} ---")
-    
+    print(f"\n--- Scanning Emory News sitemap for {start_date} to {end_date} ---")
+
     found_articles: list[dict] = []
     processed_urls: set[str] = set()
+    target_months = set(_month_iter(start_date, end_date))
 
-    if not school.get('archive_patterns'):
+    try:
+        index_root = fetch_emory_sitemap(EMORY_NEWS_SITEMAP_URL)
+        sitemap_pages = [
+            loc.text.strip()
+            for loc in index_root.findall('sm:sitemap/sm:loc', SITEMAP_NS)
+            if loc.text
+        ]
+    except (requests.exceptions.RequestException, ET.ParseError) as e:
+        print(f"  Error accessing Emory sitemap {EMORY_NEWS_SITEMAP_URL}: {e}")
         return []
 
-    # Emory uses a monthly index page
-    monthly_pattern = school['archive_patterns'][0]  # https://news.emory.edu/stories/{year}/{month:02d}/index.html
-
-    for y, m in _month_iter(start_date, end_date):
-        # get the archive url for the month
-        archive_url = monthly_pattern.format(year=y, month=m)
-        print(f"Checking Emory monthly archive: {archive_url}")
+    # Sitemap pages follow the Drupal migration order, not publish date (2025 stories sit on
+    # page 1, 2026 ones on the last page), so every page has to be checked.
+    for sitemap_page in sitemap_pages:
+        print(f"Checking Emory sitemap page: {sitemap_page}")
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            resp = requests.get(archive_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-            if resp.status_code == 404:
-                print(f"  Archive not found: {archive_url}")
+            page_root = fetch_emory_sitemap(sitemap_page)
+        except (requests.exceptions.RequestException, ET.ParseError) as e:
+            print(f"  Error accessing Emory sitemap page {sitemap_page}: {e}")
+            continue
+
+        for entry in page_root.findall('sm:url', SITEMAP_NS):
+            loc = entry.findtext('sm:loc', default='', namespaces=SITEMAP_NS)
+            match = EMORY_STORY_URL_RE.match(loc.strip())
+            if not match:
                 continue
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.content, 'html.parser')
+            if (int(match.group(1)), int(match.group(2))) not in target_months:
+                continue
 
-            # Find story links on the monthly index
-            for a in soup.find_all('a', href=True):
-                href = a['href']
-                abs_url = urljoin(archive_url, href)
-                if 'news.emory.edu/stories/' not in abs_url:
+            abs_url = match.group(0)
+            if abs_url in processed_urls:
+                continue
+
+            try:
+                # lastmod is the last edit, never earlier than publication, so a story last
+                # touched before the range cannot have been published inside it.
+                lastmod_date = parse_date_value(
+                    entry.findtext('sm:lastmod', default=None, namespaces=SITEMAP_NS)
+                )
+                if lastmod_date and datetime.strptime(lastmod_date, '%Y-%m-%d').date() < start_date:
                     continue
-                if not abs_url.endswith('/story.html'):
-                    continue
-                if abs_url in processed_urls:
-                    continue
 
-                title = a.get_text(strip=True) or 'Untitled'
-
-                # Try to extract date from slug; if missing, approximate to month start
-                url_date = extract_date_from_url(abs_url)
-                # If date is not found, fetch the date from child element(<div class="tag-list-item-meta">) of <a href="...">
-                if url_date is None:
-                    meta = a.find('div', class_='tag-list-item-meta')
-                    if meta:
-                        url_date = meta.get_text(strip=True)
-
-                try:
-                    ad = datetime.strptime(url_date, '%Y-%m-%d').date()
-                    if ad < start_date or ad > end_date:
+                title, url_date = fetch_emory_story_meta(abs_url)
+                url_date = url_date or lastmod_date
+                if url_date:
+                    article_date = datetime.strptime(url_date, '%Y-%m-%d').date()
+                    if article_date < start_date or article_date > end_date:
                         continue
-                except ValueError:
-                    pass
 
                 found_articles.append({
                     'title': title,
@@ -326,13 +392,10 @@ def emory_scan_edu_pages_for_date_range() -> list[dict]:
                     'url_date': url_date
                 })
                 processed_urls.add(abs_url)
+            except Exception as e:
+                print(f"  Error processing Emory story {abs_url}: {e}")
 
-        except requests.exceptions.RequestException as e:
-            print(f"  Error accessing Emory archive {archive_url}: {e}")
-        except Exception as e:
-            print(f"  Error processing Emory archive {archive_url}: {e}")
-
-    print(f"Emory monthly archives yielded {len(found_articles)} articles in range")
+    print(f"Emory News sitemap yielded {len(found_articles)} articles in range")
     return found_articles
 
 

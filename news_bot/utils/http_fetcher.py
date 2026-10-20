@@ -149,7 +149,8 @@ def fetch_page(
     The fallback keeps normal sites cheap while giving WordPress/student newspaper
     sites a second chance when they reject datacenter-style HTTP clients.
     """
-    fallback_statuses = fallback_statuses or {403, 429}
+    # Some WAFs (e.g. Emory Wheel's) answer datacenter clients with 405 rather than 403.
+    fallback_statuses = fallback_statuses or {403, 405, 429}
     original_error: Exception | None = None
 
     if not force_browser:
