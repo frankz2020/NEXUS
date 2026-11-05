@@ -67,6 +67,30 @@ OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS = int(
     )
 )
 
+# Without an explicit cap, OpenRouter reserves the model's whole output window
+# (65,536 tokens for Opus) against the balance and refuses every request with a
+# 402 once the balance can't cover that, although our replies are a few hundred tokens.
+OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "8192"))
+
+# The digest is published for a mainland Chinese audience, so verification also asks
+# the model whether an article centres on one of these topics and drops it if so.
+# Override with SENSITIVE_TOPICS (semicolon-separated); SENSITIVE_TOPIC_FILTER=0 turns it off.
+SENSITIVE_TOPIC_FILTER_ENABLED = os.getenv("SENSITIVE_TOPIC_FILTER", "1").lower() not in {"0", "false", "no"}
+SENSITIVE_TOPICS = [
+    topic.strip()
+    for topic in os.getenv(
+        "SENSITIVE_TOPICS",
+        "Tibet politics, the Dalai Lama, or the Tibetan exile community;"
+        "Xinjiang or Uyghurs;"
+        "Taiwan's political status or Taiwan independence;"
+        "Hong Kong protests or the Hong Kong democracy movement;"
+        "the 1989 Tiananmen Square protests;"
+        "Falun Gong;"
+        "criticism of the Chinese Communist Party or Chinese state leaders",
+    ).split(";")
+    if topic.strip()
+]
+
 OPENROUTER_IMAGE_FILTER_MODEL = _get_first_env(
     "OPENROUTER_IMAGE_FILTER_MODEL",
     "OPENROUTER_MODEL",

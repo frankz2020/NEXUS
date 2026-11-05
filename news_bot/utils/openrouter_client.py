@@ -80,7 +80,8 @@ def generate_content_from_messages(messages: list, model: str = None, temperatur
     payload = {
         "model": model,
         "messages": messages,
-        "temperature": temperature
+        "temperature": temperature,
+        "max_tokens": config.OPENROUTER_MAX_TOKENS,
     }
     
     start_time = time.time()
@@ -106,6 +107,9 @@ def generate_content_from_messages(messages: list, model: str = None, temperatur
             content = _coerce_message_content_to_text(message)
             logger.info(f"[OPENROUTER] ✅ Content generated: {len(content)} chars")
             logger.debug(f"[OPENROUTER] Response preview: {content[:200]}...")
+
+            if choice.get("finish_reason") == "length":
+                logger.warning(f"[OPENROUTER] Output hit max_tokens={config.OPENROUTER_MAX_TOKENS} and was cut off")
 
             if not content:
                 refusal = message.get("refusal")

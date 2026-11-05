@@ -464,6 +464,7 @@ def verify_article_with_gemini(school: dict[str, str], article_text: str, articl
     context_limit = getattr(config, 'OPENROUTER_MODEL_CONTEXT_LIMIT_CHARS', 2000000)
     article_text_limit = min(len(article_text), context_limit // 2)  # Use half for safety
     
+    sensitive_topics_text = "; ".join(config.SENSITIVE_TOPICS) or "none"
     prompt = f"""You are a news article analyst. Your task is to extract key metadata from the article text.
 
 ## Requirements
@@ -474,11 +475,12 @@ def verify_article_with_gemini(school: dict[str, str], article_text: str, articl
 - Do not add information not present in the article
 
 ### Task
-Analyze the article and provide your analysis in EXACTLY three lines, each starting with the specified prefix:
+Analyze the article and provide your analysis in EXACTLY four lines, each starting with the specified prefix:
 
 1. Publication Date: [Review the article text AND the Article URL ({article_url}). Extract the most prominent date, ideally the publication date. Format YYYY-MM-DD or 'Date not found'. No other explanation.]
 2. Article Type: [Is this primarily a news article reporting on events/facts, or an opinion/blog/event listing/announcement? Answer ONLY 'News article', 'Opinion/Blog', 'Event/Announcement', or 'Type unclear'. No other explanation.]
-3. Analysis Notes: [Brief internal notes if needed, or 'N/A'. This line is for your process.]
+3. Sensitive Topic: [This digest is published for readers in mainland China. Answer 'Yes' if the article's main subject, or a prominent part of it (headline, opening, or a quoted focus), involves any of these topics: {sensitive_topics_text}. Otherwise answer 'No'. Answer ONLY 'Yes' or 'No'.]
+4. Analysis Notes: [Brief internal notes if needed, or 'N/A'. This line is for your process.]
 
 ## Input Data
 
@@ -486,10 +488,11 @@ Analyze the article and provide your analysis in EXACTLY three lines, each start
 {article_text[:article_text_limit]}
 --- End of Article Text ---
 
-Your response (exactly 3 lines as specified above):
-""" 
+Your response (exactly 4 lines as specified above):
+"""
 
     gemini_publication_date_str = "Date not found" # Default from OpenRouter
+    sensitive_topic_answer = None  # stays None unless the model gives a Yes/No
     try:
         print(f"Sending verification request to OpenRouter API ({config.OPENROUTER_MODEL})...")
         
@@ -524,20 +527,26 @@ Your response (exactly 3 lines as specified above):
                 "article_type_assessment": "Type unclear (OpenRouter parsing error)"
             }
             parsed_items_count = 0
-            for line_idx, line in enumerate(lines[:3]): # Only process up to the first 3 expected lines
+            for line in lines[:6]:  # four expected lines, with a little slack for stray blank lines
                 line_strip = line.strip()
-                if (line_idx == 0 and "Publication Date:" in line_strip) or (not results_from_gemini["publication_date_str"] == "Date not found by OpenRouter" and "Publication Date:" in line_strip):
+                if "Publication Date:" in line_strip and results_from_gemini["publication_date_str"] == "Date not found by OpenRouter":
                     results_from_gemini["publication_date_str"] = line_strip.split("Publication Date:", 1)[-1].strip()
                     parsed_items_count += 1
-                elif (line_idx == 1 and "Article Type:" in line_strip) or (results_from_gemini["article_type_assessment"] == "Type unclear (OpenRouter parsing error)" and "Article Type:" in line_strip):
+                elif "Article Type:" in line_strip and results_from_gemini["article_type_assessment"] == "Type unclear (OpenRouter parsing error)":
                     results_from_gemini["article_type_assessment"] = line_strip.split("Article Type:", 1)[-1].strip()
                     parsed_items_count += 1
-            
+                elif "Sensitive Topic:" in line_strip and sensitive_topic_answer is None:
+                    # First word only, so "** Yes." or "No (campus event)" still parse.
+                    answer_words = re.findall(r"[a-z]+", line_strip.split("Sensitive Topic:", 1)[-1].lower())
+                    if answer_words and answer_words[0] in {"yes", "no"}:
+                        sensitive_topic_answer = answer_words[0]
+                        parsed_items_count += 1
+
             gemini_publication_date_str = results_from_gemini["publication_date_str"]
             final_article_type = results_from_gemini["article_type_assessment"]
 
-            if parsed_items_count < 2:
-                print(f"Warning: OpenRouter verification response for {article_url} did not parse all expected fields. Parsed: {parsed_items_count}/2.")
+            if parsed_items_count < 3:
+                print(f"Warning: OpenRouter verification response for {article_url} did not parse all expected fields. Parsed: {parsed_items_count}/3.")
 
     except Exception as e_gemini:
         print(f"Error during OpenRouter API call or parsing for verification of {article_url}: {e_gemini}")
@@ -583,13 +592,24 @@ Your response (exactly 3 lines as specified above):
             except ValueError:
                 is_recent_status = f"Date unparsable {date_source_log}"
                 print(f"Warning: Could not parse final date '{final_date_str}' for {article_url}.")
-        
+
+    # Relevance itself was filtered in Step 1; here it only drops sensitive topics.
+    # Every caller already skips anything not marked "Relevant", and an unanswered
+    # check counts as a skip so a sensitive story can't slip through on a bad reply.
+    relevance = "Relevant"
+    if config.SENSITIVE_TOPIC_FILTER_ENABLED:
+        if sensitive_topic_answer == "yes":
+            relevance = "Not relevant (sensitive topic)"
+            print(f"Info: Skipping {article_url}: flagged as a sensitive topic.")
+        elif sensitive_topic_answer != "no":
+            relevance = "Unclear (sensitive-topic check got no answer)"
+
     final_results = {
         "url": article_url,
         "publication_date_str": final_date_str,
         "is_recent": is_recent_status,
         "is_within_range": is_within_range,
-        "is_relevant": "Relevant",  # Already filtered in Step 1, so assume relevant
+        "is_relevant": relevance,
         "article_type_assessment": final_article_type if 'final_article_type' in locals() else "Type unclear (init error)"
     }
     print(f"Verification results for {article_url[:100]}...: {final_results}")
