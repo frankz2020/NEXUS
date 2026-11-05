@@ -347,6 +347,6 @@ def nyu_scan_category_pages_for_links() -> list[dict[str, str]]:
     print(f"Found {len(found_articles)} unique potential articles from category page scans.")
     
     # Sort articles by date if available (newest first for consistency)
-    found_articles.sort(key=lambda x: x.get('url_date', '9999-99-99'), reverse=True)
+    found_articles.sort(key=lambda x: x.get('url_date') or '9999-99-99', reverse=True)
     
     return found_articles
