@@ -2,10 +2,10 @@ from datetime import date, timedelta, datetime
 from googleapiclient.discovery import build # For Google Custom Search API
 from ...core import config, school_config
 from ...discovery.date_extractor import extract_date_from_url, extract_ymd_from_text
-from ...utils import prompt_logger, openrouter_client
+from ...utils import prompt_logger, openrouter_client, http_fetcher
 import requests # For fetching category pages
 from bs4 import BeautifulSoup # For parsing category pages
-from urllib.parse import urljoin # For resolving relative URLs
+from urllib.parse import urlencode, urljoin # For resolving relative URLs
 import re # For regular expressions
 import json
 
@@ -65,13 +65,6 @@ def usc_scan_annenberg_media_for_links() -> list[dict]:
     size = 40
     max_pages = 30
     page_count = 0
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/91.0.4472.124 Safari/537.36"
-        )
-    }
 
     while should_continue:
         if page_count >= max_pages:
@@ -91,9 +84,15 @@ def usc_scan_annenberg_media_for_links() -> list[dict]:
                 "_website": "uscannenberg",
                 "d": "101",
             }
-            resp = requests.get(base_api, params=params, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-            resp.raise_for_status()
-            data = resp.json()
+            fetched_page = http_fetcher.fetch_page(
+                f"{base_api}?{urlencode(params)}",
+                timeout=config.URL_FETCH_TIMEOUT,
+            )
+            # The browser fallback returns the JSON wrapped in its HTML viewer page.
+            body = fetched_page.text
+            if fetched_page.source == "playwright":
+                body = BeautifulSoup(body, "html.parser").get_text()
+            data = json.loads(body)
 
             elements = data.get("content_elements") or []
             if not elements:
@@ -187,11 +186,7 @@ def usc_scan_ubcnews_for_links() -> list[dict]:
     
     url = "https://www.cbsnews.com/tag/university-of-southern-california/"
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        response.raise_for_status()
+        response = http_fetcher.fetch_page(url, timeout=config.URL_FETCH_TIMEOUT)
         soup = BeautifulSoup(response.content, 'html.parser')
         side_bar_section = soup.find('section', id="component-list-latest-news")
         articles = side_bar_section.find_all('article')
@@ -245,11 +240,7 @@ def usc_latimes_news_pages_for_links() -> list[dict]:
     
     url = "https://www.latimes.com/topic/education"
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        response.raise_for_status()
+        response = http_fetcher.fetch_page(url, timeout=config.URL_FETCH_TIMEOUT)
         soup = BeautifulSoup(response.text, "html.parser")
 
         # New LATimes listing structure (per screenshot):
@@ -328,11 +319,7 @@ def usc_scan_uscnews_for_links() -> list[dict]:
     
     url = "https://today.usc.edu/category/university/"
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        response.raise_for_status()
+        response = http_fetcher.fetch_page(url, timeout=config.URL_FETCH_TIMEOUT)
         soup = BeautifulSoup(response.content, 'html.parser')
         articles = soup.find_all("article")
         for article in articles:
@@ -371,11 +358,7 @@ def usc_scan_daily_trojan_for_links() -> list[dict]:
 
     url = "https://dailytrojan.com/category/news/"
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        response.raise_for_status()
+        response = http_fetcher.fetch_page(url, timeout=config.URL_FETCH_TIMEOUT)
         soup = BeautifulSoup(response.content, "html.parser")
         articles = soup.find_all("article")
 

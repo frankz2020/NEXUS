@@ -133,9 +133,6 @@ def is_edin_relevant_external_article(article_url: str, title: str) -> bool:
     if 'midlothianview.com' in lower_url:
         return 'edinburgh' in combined or 'university' in combined or 'student' in combined
 
-    if 'oikotimene.org' in lower_url:
-        return 'edinburgh' in combined or 'student' in combined or 'wcc' in combined
-
     return True
 
 

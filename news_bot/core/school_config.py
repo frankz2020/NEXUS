@@ -127,7 +127,6 @@ SCHOOL_PROFILES = {
       "www.expressandstar.com",
       "midlothianview.com",
       "projectscot.com",
-      "oikotimene.org",
     ],
     "category_pages": [
       "https://www.ed.ac.uk/news/latest?search_api_news_fulltext=&field_news_publication_date%5Bmin%5D={start_year}-{start_month:02d}-{start_day:02d}&field_news_publication_date%5Bmax%5D={end_year}-{end_month:02d}-{end_day:02d}",
@@ -139,7 +138,6 @@ SCHOOL_PROFILES = {
       "https://www.expressandstar.com/uk-news/",
       "https://www.midlothianview.com/news/",
       "https://projectscot.com",
-      "https://oikotimene.org/news/",
     ],
     "archive_patterns": [
       ],
@@ -152,7 +150,6 @@ SCHOOL_PROFILES = {
       "expressandstar.com",
       "midlothianview.com",
       "projectscot.com",
-      "oikotimene.org",
     ],
     "prompt_context": {
       "audience_en": "Chinese international students at Edinburgh",

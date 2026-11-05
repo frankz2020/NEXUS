@@ -4,6 +4,7 @@ from datetime import date, timedelta, datetime
 from googleapiclient.discovery import build # For Google Custom Search API
 from ...core import config, school_config
 from ...discovery.date_extractor import extract_date_from_url
+from ...utils import http_fetcher
 import requests # For fetching category pages
 from bs4 import BeautifulSoup # For parsing category pages
 from urllib.parse import urljoin, urlparse # For resolving relative URLs
@@ -87,12 +88,7 @@ def ucd_scan_leadership_rss_for_links() -> list[dict[str, str | None]]:
     processed_urls = set()
 
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
-        }
-        response = requests.get(rss_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        response.raise_for_status()
+        response = http_fetcher.fetch_page(rss_url, timeout=config.URL_FETCH_TIMEOUT)
         root = ET.fromstring(response.content)
 
         for item in root.findall('.//item'):
@@ -138,12 +134,7 @@ def ucd_enterprise_news_pages_for_links() -> list[dict]:
     ]
     for url in urls:
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-                
-            response.raise_for_status()
+            response = http_fetcher.fetch_page(url, timeout=config.URL_FETCH_TIMEOUT)
             soup = BeautifulSoup(response.content, 'html.parser')
 
             articles = soup.find_all('article')
@@ -238,17 +229,7 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
                 print(f"Scanning {page_group_name} page {page_num}: {current_page_url}")
                 
                 try:
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    }
-                    response = requests.get(current_page_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-                    
-                    # If pagination doesn't exist, break the loop
-                    if page_num > 1 and response.status_code == 404:
-                        print(f"  Page {page_num} not found, stopping pagination.")
-                        break
-                        
-                    response.raise_for_status()
+                    response = http_fetcher.fetch_page(current_page_url, timeout=config.URL_FETCH_TIMEOUT)
                     soup = BeautifulSoup(response.content, 'html.parser')
 
                     candidate_links = {}
@@ -358,6 +339,10 @@ def ucd_scan_category_pages_for_links() -> list[dict[str, str]]:
                         break
                         
                 except requests.exceptions.RequestException as e_req:
+                    # If pagination doesn't exist, break the loop
+                    if page_num > 1 and getattr(e_req.response, "status_code", None) == 404:
+                        print(f"  Page {page_num} not found, stopping pagination.")
+                        break
                     print(f"Error fetching category page {current_page_url}: {e_req}")
                     if page_num == 1:
                         break  # If first page fails, don't try pagination

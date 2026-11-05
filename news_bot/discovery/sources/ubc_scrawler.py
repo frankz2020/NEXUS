@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from ...discovery.date_extractor import extract_date_from_url
 from ...core import config, school_config
+from ...utils import http_fetcher
 
 
 def to_url_date(dt_str: str) -> str | None:
@@ -41,17 +42,10 @@ def ubc_scan_ubyssey_pages_for_date_range() -> list[dict]:
     processed_urls = set()
     
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        resp = requests.get(page_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        if resp.status_code == 404:
-            print(f"  Page not found: {page_url}")
+        fetched_page = http_fetcher.fetch_page(page_url, timeout=config.URL_FETCH_TIMEOUT)
+        soup = BeautifulSoup(fetched_page.content, 'html.parser')
 
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.content, 'html.parser')
-        
-        
+
         for article in soup.find_all('article'):
             headline = article.find('h3', class_='o-article__headline')
             if not headline:
@@ -121,7 +115,7 @@ def ubc_scan_category_pages_for_date_range() -> list[dict]:
 
     for page_url in school['category_pages']:
         # UBC uses a pagination system, flip page until the page date is outside the range
-        while flag:
+        while flag and page <= config.MAX_CATEGORY_PAGES_TO_SCAN:
             print(f"Checking UBC category page: {page_url}")
             
             try:
@@ -189,6 +183,8 @@ def ubc_scan_category_pages_for_date_range() -> list[dict]:
                 page += 1
             except Exception as e:
                 print(f"  Error accessing UBC category page {page_url}: {e}")
+                # The page counter hasn't moved, so retrying here would loop forever.
+                flag = False
     return found_articles
 
 

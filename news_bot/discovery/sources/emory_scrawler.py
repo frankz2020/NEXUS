@@ -11,11 +11,6 @@ from ...utils import http_fetcher
 
 school = school_config.SCHOOL_PROFILES['emory']
 
-EMORY_REQUEST_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-}
-EMORY_RETRYABLE_STATUS_CODES = {405, 429, 500, 502, 503, 504}
 # Statuses that still fail after http_fetcher's browser fallback (and, for 429, after backoff
 # retries) mean the Wheel is blocking this server; it answers datacenter clients such as
 # Railway with 405.
@@ -80,40 +75,33 @@ def build_emory_external_page_variants(page_url: str, page_num: int) -> list[str
     return deduped_variants
 
 
-def fetch_emory_page(url: str, referer: str | None = None, max_attempts: int = 3) -> requests.Response:
-    headers = dict(EMORY_REQUEST_HEADERS)
-    if referer:
-        headers['Referer'] = referer
-
-    last_response = None
+def fetch_emory_page(
+    url: str,
+    referer: str | None = None,
+    force_browser: bool = False,
+    max_attempts: int = 3,
+) -> http_fetcher.FetchedPage:
+    """http_fetcher.fetch_page plus a backoff retry on 429/5xx. Raises HTTPError on failure, including 404."""
     for attempt in range(1, max_attempts + 1):
-        response = requests.get(url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        last_response = response
-
-        if response.status_code == 404:
-            return response
-        if response.status_code not in EMORY_RETRYABLE_STATUS_CODES:
-            response.raise_for_status()
-            return response
-
-        if attempt == max_attempts:
-            response.raise_for_status()
-
-        sleep_seconds = attempt
-        print(
-            f"  Emory request retry {attempt}/{max_attempts - 1} for {url} "
-            f"after status {response.status_code}"
-        )
-        time.sleep(sleep_seconds)
-
-    assert last_response is not None
-    return last_response
+        try:
+            return http_fetcher.fetch_page(
+                url,
+                timeout=config.URL_FETCH_TIMEOUT,
+                referer=referer,
+                force_browser=force_browser,
+            )
+        except requests.exceptions.HTTPError as e:
+            status_code = getattr(e.response, 'status_code', None)
+            retryable = status_code is not None and (status_code == 429 or status_code >= 500)
+            if not retryable or attempt == max_attempts:
+                raise
+            print(f"  Emory request retry {attempt}/{max_attempts - 1} for {url} after status {status_code}")
+            time.sleep(attempt)
 
 
 def extract_date_from_emory_article_page(article_url: str) -> str | None:
     try:
         resp = fetch_emory_page(article_url)
-        resp.raise_for_status()
         soup = BeautifulSoup(resp.content, 'html.parser')
 
         meta_candidates = [
@@ -168,6 +156,10 @@ def emory_collect_generic_candidate_links(soup: BeautifulSoup, current_page_url:
         if not is_allowed_domain(abs_url):
             continue
 
+        # The listing's links back to itself (pagination, filters) aren't articles.
+        if urlparse(abs_url).path.rstrip('/') == urlparse(current_page_url).path.rstrip('/'):
+            continue
+
         if any(skip in abs_url.lower() for skip in ["/tag/", "/author/", "/page/", "/category/", "javascript:", "mailto:", "#"]):
             continue
 
@@ -181,25 +173,6 @@ def emory_collect_generic_candidate_links(soup: BeautifulSoup, current_page_url:
         candidate_links[link_tag] = extract_date_from_url(abs_url)
 
     return candidate_links
-
-
-def fetch_emory_wheel_page(url: str, referer: str, force_browser: bool, max_attempts: int = 3):
-    """http_fetcher.fetch_page plus the backoff retry on 429/5xx that fetch_emory_page provides."""
-    for attempt in range(1, max_attempts + 1):
-        try:
-            return http_fetcher.fetch_page(
-                url,
-                timeout=config.URL_FETCH_TIMEOUT,
-                referer=referer,
-                force_browser=force_browser,
-            )
-        except requests.exceptions.HTTPError as e:
-            status_code = getattr(e.response, 'status_code', None)
-            retryable = status_code is not None and (status_code == 429 or status_code >= 500)
-            if not retryable or attempt == max_attempts:
-                raise
-            print(f"  Emory request retry {attempt}/{max_attempts - 1} for {url} after status {status_code}")
-            time.sleep(attempt)
 
 
 def emory_scan_wheel_pages_for_date_range() -> list[dict]:
@@ -225,7 +198,7 @@ def emory_scan_wheel_pages_for_date_range() -> list[dict]:
         current_page_url = f"{page_url}?page={page_num}&per_page=20"
         print(f"Checking Emory wheel page: {current_page_url}")
         try:
-            fetched_page = fetch_emory_wheel_page(current_page_url, page_url, force_browser=use_browser)
+            fetched_page = fetch_emory_page(current_page_url, referer=page_url, force_browser=use_browser)
             # Once plain requests has been blocked, skip straight to the browser for later pages.
             use_browser = fetched_page.source == 'playwright'
             soup = BeautifulSoup(fetched_page.content, 'html.parser')
@@ -307,7 +280,6 @@ def fetch_emory_story_meta(article_url: str) -> tuple[str, str | None]:
     title, publish_date = slug.replace('-', ' ').capitalize(), None
 
     resp = fetch_emory_page(article_url)
-    resp.raise_for_status()  # fetch_emory_page returns 404s without raising
     soup = BeautifulSoup(resp.content, 'html.parser')
 
     h1 = soup.find('h1')
@@ -324,7 +296,6 @@ def fetch_emory_story_meta(article_url: str) -> tuple[str, str | None]:
 
 def fetch_emory_sitemap(url: str) -> ET.Element:
     resp = fetch_emory_page(url)
-    resp.raise_for_status()  # fetch_emory_page returns 404s without raising
     return ET.fromstring(resp.content)
 
 
@@ -416,21 +387,20 @@ def emory_scan_external_source_pages_for_date_range() -> list[dict]:
         for page_num in range(max_pages + 1):
             resp = None
             current_page_url = None
+            last_error = None
             for page_variant in build_emory_external_page_variants(page_url, page_num):
                 try:
                     candidate_resp = fetch_emory_page(page_variant, referer=page_url)
-                    if candidate_resp.status_code == 404:
-                        continue
-                    candidate_resp.raise_for_status()
                     resp = candidate_resp
                     current_page_url = candidate_resp.url
                     break
-                except requests.exceptions.RequestException:
+                except requests.exceptions.RequestException as e:
+                    last_error = e
                     continue
 
             if resp is None or current_page_url is None:
                 if page_num == 0:
-                    print(f"  External source page not found: {page_url}")
+                    print(f"  Could not read external source page {page_url}: {last_error}")
                 break
 
             try:
