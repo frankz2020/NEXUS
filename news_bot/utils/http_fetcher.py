@@ -156,7 +156,9 @@ def fetch_page(
     if not force_browser:
         try:
             fetched_page = _requests_fetch(url, timeout=timeout, referer=referer)
-            is_block_page = _looks_like_block_page(fetched_page.text)
+            # AWS WAF answers suspected bots with an empty 202 challenge instead of an error status.
+            is_waf_challenge = fetched_page.status_code == 202 and not fetched_page.content.strip()
+            is_block_page = is_waf_challenge or _looks_like_block_page(fetched_page.text)
             if fetched_page.status_code not in fallback_statuses and not is_block_page:
                 _raise_http_error(
                     fetched_page.url,
@@ -184,6 +186,9 @@ def fetch_page(
             except requests.exceptions.RequestException as exc:
                 original_error = exc
         except requests.exceptions.RequestException as exc:
+            # A 404 is a real answer, not a block: a browser would only get the same page.
+            if getattr(exc.response, "status_code", None) == 404:
+                raise
             original_error = exc
             logger.info("Requests fetch failed for %s; trying Playwright fallback: %s", url, exc)
 

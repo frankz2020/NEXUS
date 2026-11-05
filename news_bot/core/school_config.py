@@ -125,7 +125,7 @@ SCHOOL_PROFILES = {
       "www.edinburghlive.co.uk",
       "thetab.com",
       "www.expressandstar.com",
-      "www.midlothianview.com",
+      "midlothianview.com",
       "projectscot.com",
       "oikotimene.org",
     ],

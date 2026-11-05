@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from ...discovery.date_extractor import extract_ymd_from_text, extract_date_from_url
 from ...core import config, school_config
+from ...utils import http_fetcher
 
 school = school_config.SCHOOL_PROFILES['edin']
 
@@ -53,12 +54,8 @@ def build_edin_external_page_variants(page_url: str, page_num: int) -> list[str]
 
 def extract_date_from_edin_article_page(article_url: str) -> str | None:
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(article_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
+        fetched_page = http_fetcher.fetch_page(article_url, timeout=config.URL_FETCH_TIMEOUT)
+        soup = BeautifulSoup(fetched_page.content, 'html.parser')
 
         meta_candidates = [
             ('property', 'article:published_time'),
@@ -87,12 +84,8 @@ def extract_date_from_edin_article_page(article_url: str) -> str | None:
 
 def extract_title_from_edin_article_page(article_url: str) -> str | None:
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(article_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
+        fetched_page = http_fetcher.fetch_page(article_url, timeout=config.URL_FETCH_TIMEOUT)
+        soup = BeautifulSoup(fetched_page.content, 'html.parser')
 
         meta_title = soup.find('meta', attrs={'property': 'og:title'})
         if meta_title and meta_title.get('content'):
@@ -122,6 +115,14 @@ def is_edin_relevant_external_article(article_url: str, title: str) -> bool:
 
     if 'thetab.com' in lower_url:
         return 'edinburgh' in combined or 'heriot-watt' in combined or 'napier' in combined
+
+    if 'edinburghlive.co.uk' in lower_url:
+        # A local tabloid: unfiltered, its many crime and traffic stories would each cost an
+        # LLM verification call and crowd campus news out of the report limit.
+        return any(
+            marker in combined
+            for marker in ['university', 'student', 'napier', 'heriot-watt', 'campus', 'graduate', ' uni ', '-uni-']
+        )
 
     if 'expressandstar.com' in lower_url:
         return 'edinburgh' in combined or 'university of edinburgh' in combined
@@ -197,23 +198,18 @@ def edin_scan_edinburgh_news_pages_for_date_range() -> list[dict]:
     print(f"  Checking Edinburgh category page: {page_url}")
     
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        resp = requests.get(page_url, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-        if resp.status_code == 404:
-            print(f"  Archive not found: {page_url}")
-            return []
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.content, 'html.parser')
+        fetched_page = http_fetcher.fetch_page(page_url, timeout=config.URL_FETCH_TIMEOUT)
+        soup = BeautifulSoup(fetched_page.content, 'html.parser')
         cards = soup.find_all('div', class_='news-listing')
         for card in cards:
             a = card.find('a', href=True)
+            date_tag = card.find('span', class_='news-date')
+            if not a or not date_tag:
+                continue
             href = a['href']
             abs_url = urljoin(page_url, href)
             title = a.get_text(strip=True) or 'Untitled'
-            card_date = card.find('span', class_='news-date').get_text(strip=True)
-            url_date = extract_ymd_from_text(card_date)
+            url_date = extract_ymd_from_text(date_tag.get_text(strip=True))
             if url_date is None:
                 continue
             article_date = datetime.strptime(url_date, "%Y-%m-%d").date()
@@ -314,42 +310,50 @@ def edin_scan_external_source_pages_for_date_range() -> list[dict]:
 
     for page_url in external_pages:
         max_pages = config.MAX_CATEGORY_PAGES_TO_SCAN
+        seen_candidate_urls: set[str] = set()
         for page_num in range(max_pages + 1):
-            response = None
+            candidate_links = None
             current_page_url = None
+            last_error = None
             for page_variant in build_edin_external_page_variants(page_url, page_num):
                 try:
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    }
-                    candidate_response = requests.get(page_variant, headers=headers, timeout=config.URL_FETCH_TIMEOUT)
-                    if candidate_response.status_code == 404:
-                        continue
-                    candidate_response.raise_for_status()
-                    response = candidate_response
-                    current_page_url = candidate_response.url
-                    break
-                except requests.exceptions.RequestException:
+                    fetched_page = http_fetcher.fetch_page(page_variant, timeout=config.URL_FETCH_TIMEOUT)
+                    soup = BeautifulSoup(fetched_page.content, 'html.parser')
+                    page_links = collect_generic_candidate_links(soup, fetched_page.url)
+                except Exception as e:
+                    last_error = e
                     continue
 
-            if response is None or current_page_url is None:
-                if page_num == 0:
-                    print(f"  External source page not found: {page_url}")
+                # Many sites ignore a pagination parameter they don't know and re-serve page one,
+                # so only accept a variant that actually shows links we haven't seen.
+                has_new_links = any(
+                    urljoin(fetched_page.url, link_tag.get('href')) not in seen_candidate_urls
+                    for link_tag in page_links
+                )
+                if page_num > 0 and not has_new_links:
+                    continue
+
+                candidate_links = page_links
+                current_page_url = fetched_page.url
                 break
 
+            if candidate_links is None:
+                if page_num == 0:
+                    print(f"  Could not read external source page {page_url}: {last_error}")
+                break
+
+            if not candidate_links:
+                print(f"  Info: No candidate article links found on external source page: {current_page_url}")
+                continue
+
+            page_dates: list[str] = []
             try:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                candidate_links = collect_generic_candidate_links(soup, current_page_url)
-
-                if not candidate_links:
-                    print(f"  Info: No candidate article links found on external source page: {current_page_url}")
-                    if page_num > 0:
-                        break
-                    continue
-
                 for link_tag, url_date in candidate_links.items():
                     href = link_tag.get('href')
                     abs_url = urljoin(current_page_url, href)
+                    if abs_url in seen_candidate_urls:
+                        continue
+                    seen_candidate_urls.add(abs_url)
                     if abs_url in processed_urls:
                         continue
 
@@ -359,11 +363,16 @@ def edin_scan_external_source_pages_for_date_range() -> list[dict]:
                     if not title:
                         continue
 
+                    if url_date:
+                        page_dates.append(url_date)
+
                     if not is_edin_relevant_external_article(abs_url, title):
                         continue
 
                     if url_date is None:
                         url_date = extract_date_from_edin_article_page(abs_url)
+                        if url_date:
+                            page_dates.append(url_date)
 
                     if url_date is None:
                         if config.NEWS_START_DATE:
@@ -394,6 +403,11 @@ def edin_scan_external_source_pages_for_date_range() -> list[dict]:
                     processed_urls.add(abs_url)
             except Exception as e:
                 print(f"  Error accessing Edinburgh external source page {current_page_url}: {e}")
+
+            # Listings run newest-first: once a page's new links all predate the range, stop.
+            # Require a few dates so one old sidebar story can't end the scan.
+            if len(page_dates) >= 3 and max(page_dates) < start_date.isoformat():
+                break
 
     return found_articles
 
